@@ -41,6 +41,12 @@ return [
         'auto_generate' => (bool) env('QUIZ_AUTO_GENERATE', false),
     ],
 
+    // Secret that pasted JSON must contain for POST /api/publish. Only its bcrypt hash is stored;
+    // override with PUBLISH_SECRET_HASH (a bcrypt hash) to change it without a deploy.
+    'publish' => [
+        'secret_hash' => env('PUBLISH_SECRET_HASH', '$2y$10$WfXjerIaYpjjs4JhrH4p2OKG5dY3AA5rdL6gm93KWwDFiEDsYvEB6'),
+    ],
+
     'admin' => [
         'token' => env('ADMIN_API_TOKEN'),
     ],

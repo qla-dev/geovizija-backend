@@ -10,6 +10,17 @@ Instructions for a Claude agent (Claude Code routine / scheduled run) that write
 
 A ready-to-paste prompt for the scheduled run is in [routine-prompt.md](routine-prompt.md).
 
+## Publishing without the admin token
+
+`POST /publish` (public, 10 requests/minute) publishes one article or quiz when the JSON itself contains the publish secret (only its bcrypt hash is on the server, `services.publish.secret_hash`). Wrong or missing secret → 403, nothing stored. The same is available as a paste form at `https://geovizija.com/#/objavi`.
+
+```json
+{"secret": "…", "type": "article", "category": "priroda", "title": "…", "excerpt": "…", "content": "…body with two [[SLIKA: …]] lines…"}
+{"secret": "…", "type": "quiz", "date": "2026-10-02", "title": "…", "intro": "…", "questions": [{"topic": "…", "question": "…", "options": ["…","…","…","…"], "correct": 0, "explanation": "…"}]}
+```
+
+An article is published immediately and its cover and in-text images are drawn in the same request (~1 minute). A quiz for a date that already has one is refused (409). Never write the secret into this repository.
+
 ## Environment
 
 The run needs two environment variables (set them as secrets of the routine / cloud environment, never in the repo):
