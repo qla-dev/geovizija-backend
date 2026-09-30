@@ -39,4 +39,11 @@ return [
         'token' => env('ADMIN_API_TOKEN'),
     ],
 
+    'openrouter' => [
+        'api_key' => env('OPENROUTER_API_KEY'),
+        'model' => env('OPENROUTER_MODEL', 'google/gemini-2.5-flash'),
+        'fallback_model' => env('OPENROUTER_FALLBACK_MODEL'),
+        'url' => env('OPENROUTER_URL', 'https://openrouter.ai/api/v1/chat/completions'),
+    ],
+
 ];
