@@ -24,6 +24,15 @@ The host's MySQL defaults to MyISAM with a 1000-byte key limit; `config/database
 
 Each generation is a paid OpenRouter call.
 
+# Post content
+
+`App\Services\PostContentGenerator` rewrites a post's excerpt and body into a 900–1300 word Bosnian (ijekavica) magazine article through `OPENROUTER_MODEL`; title and slug are kept. Body format: paragraphs separated by blank lines, subheadings as lines starting with `## ` (rendered by the frontend's `ArticlePage`). It retries the primary model once before `OPENROUTER_FALLBACK_MODEL`.
+
+- On the server: `POST https://geovizija.com/endpoints/api/posts/{id}/generate-content` (admin token)
+- CLI: `php artisan posts:generate-content {ids...}` — writes to whatever database `.env` points at.
+
+Generated text can contain inaccurate specifics; the prompt forbids invented quotes and statistics, but review before relying on figures. The original short texts remain in `database/seeders/data/posts.json`.
+
 # Database safety — mandatory
 
 `.env` may point at the live production database (`tagnetba_geovizija` on the remote host). Never assume a command is safe because of an environment name.
