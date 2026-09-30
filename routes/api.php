@@ -14,4 +14,5 @@ Route::middleware(EnsureAdminToken::class)->group(function () {
     Route::apiResource('categories', CategoryController::class)->except(['index', 'show']);
     Route::apiResource('posts', PostController::class)->except(['index', 'show']);
     Route::post('/posts/{post}/generate-image', [PostController::class, 'generateImage']);
+    Route::post('/posts/{post}/generate-content', [PostController::class, 'generateContent']);
 });

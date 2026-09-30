@@ -1,0 +1,129 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\Post;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use RuntimeException;
+
+/**
+ * Rewrites a post's excerpt and body into a longer magazine article through OpenRouter's text models.
+ *
+ * The title (and so the slug) stays as it is. The body uses blank-line separated paragraphs and
+ * "## " subheadings, which is what the frontend's ArticlePage renders.
+ */
+class PostContentGenerator
+{
+    public function generate(Post $post): Post
+    {
+        $apiKey = (string) config('services.openrouter.api_key');
+        if ($apiKey === '') {
+            throw new RuntimeException('OPENROUTER_API_KEY is not configured.');
+        }
+
+        $models = array_values(array_unique(array_filter([
+            (string) config('services.openrouter.model'),
+            (string) config('services.openrouter.fallback_model'),
+        ])));
+
+        $lastError = 'The text generator did not return an article.';
+
+        // The primary model occasionally returns a short or malformed article: retry it, then try the fallback.
+        foreach ([$models[0], $models[0], ...array_slice($models, 1)] as $model) {
+            try {
+                $article = $this->request($post, $model, $apiKey);
+            } catch (RuntimeException $exception) {
+                $lastError = $exception->getMessage();
+                Log::warning('Post content generation failed.', ['post_id' => $post->id, 'model' => $model, 'error' => $lastError]);
+
+                continue;
+            }
+
+            $post->update([
+                'excerpt' => $article['excerpt'],
+                'content' => $article['content'],
+                'read_time' => max(1, (int) ceil(self::words($article['content']) / 200)),
+            ]);
+
+            return $post;
+        }
+
+        throw new RuntimeException($lastError);
+    }
+
+    /** @return array{excerpt: string, content: string} */
+    private function request(Post $post, string $model, string $apiKey): array
+    {
+        $post->loadMissing('category');
+
+        try {
+            $response = Http::withToken($apiKey)
+                ->acceptJson()
+                ->timeout(180)
+                ->withHeaders(['HTTP-Referer' => config('app.url'), 'X-Title' => 'Geovizija post content'])
+                ->post((string) config('services.openrouter.url'), [
+                    'model' => $model,
+                    'response_format' => ['type' => 'json_object'],
+                    'messages' => [
+                        ['role' => 'system', 'content' => $this->instructions()],
+                        ['role' => 'user', 'content' => 'Kategorija: '.($post->category?->name ?? 'Općenito')
+                            ."\nNaslov: {$post->title}"
+                            ."\nPostojeći uvod: {$post->excerpt}"
+                            ."\nPostojeći tekst:\n{$post->content}"],
+                    ],
+                ]);
+        } catch (ConnectionException $exception) {
+            throw new RuntimeException('The text generator is not available right now: '.$exception->getMessage());
+        }
+
+        if (! $response->successful()) {
+            throw new RuntimeException(data_get($response->json(), 'error.message') ?: "The text generator returned HTTP {$response->status()}.");
+        }
+
+        $raw = (string) data_get($response->json(), 'choices.0.message.content');
+        $raw = preg_replace('/^```(?:json)?\s*|\s*```$/', '', trim($raw));
+        $article = json_decode((string) $raw, true);
+        $finish = (string) data_get($response->json(), 'choices.0.finish_reason');
+
+        if (! is_array($article)) {
+            throw new RuntimeException('The text generator returned invalid JSON ('.json_last_error_msg().", finish: {$finish}, ".strlen((string) $raw).' chars).');
+        }
+
+        $excerpt = trim((string) data_get($article, 'excerpt'));
+        $content = trim(str_replace("\r\n", "\n", (string) data_get($article, 'content')));
+
+        if ($excerpt === '' || self::words($content) < 400) {
+            throw new RuntimeException('The text generator returned an incomplete article ('.self::words($content)." words, finish: {$finish}).");
+        }
+
+        return ['excerpt' => $excerpt, 'content' => $content];
+    }
+
+    /** Word count that handles non-ASCII letters (str_word_count splits on č, š, ž...). */
+    public static function words(string $text): int
+    {
+        return count(preg_split('/\s+/u', trim($text), -1, PREG_SPLIT_NO_EMPTY));
+    }
+
+    private function instructions(): string
+    {
+        return <<<'TXT'
+Ti si urednik Geovizije, bosanskohercegovačkog magazina o prirodi, geografiji, putovanjima, društvu, kulturi i tehnologiji u stilu National Geographica.
+Na osnovu naslova i postojećeg kratkog teksta napiši potpun, zanimljiv i informativan članak na bosanskom jeziku (ijekavica, latinica).
+
+Zahtjevi:
+- Dužina teksta: 900 do 1300 riječi.
+- Počni snažnim uvodnim pasusom koji uvlači čitaoca (scena, pitanje ili upečatljiva činjenica), bez ponavljanja naslova.
+- 3 do 5 podnaslova; svaki podnaslov je zaseban red koji počinje sa "## ".
+- Pasusi i podnaslovi su odvojeni praznim redom. Bez markdowna osim "## " (bez podebljanja, lista, linkova, emojija).
+- Konkretni detalji o mjestima, vrstama, procesima i historijskom kontekstu, ali samo općepoznate i provjerljive činjenice.
+- Ne izmišljaj citate stvarnih osoba, imena stručnjaka, institucija ni precizne statistike koje nisu općepoznate.
+- Završi pasusom koji povezuje temu s čitaocem ili budućnošću.
+- "excerpt": 1 do 2 rečenice (do 220 znakova) koje najavljuju članak.
+
+Vrati isključivo JSON objekat: {"excerpt": "...", "content": "..."}
+TXT;
+    }
+}

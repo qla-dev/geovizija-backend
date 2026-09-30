@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\PostResource;
 use App\Models\Category;
 use App\Models\Post;
+use App\Services\PostContentGenerator;
 use App\Services\PostImageGenerator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
@@ -64,6 +65,18 @@ class PostController extends Controller
 
     /** Generates a new cover image through OpenRouter and stores it on the post. */
     public function generateImage(Post $post, PostImageGenerator $generator)
+    {
+        try {
+            $generator->generate($post);
+        } catch (RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 502);
+        }
+
+        return new PostResource($post->refresh()->load('category'));
+    }
+
+    /** Rewrites the excerpt and body into a full article through OpenRouter. */
+    public function generateContent(Post $post, PostContentGenerator $generator)
     {
         try {
             $generator->generate($post);
