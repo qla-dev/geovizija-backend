@@ -29,11 +29,19 @@ class QuizGenerator
         return Carbon::now(self::TIMEZONE)->toDateString();
     }
 
-    /** Returns the quiz for $date, generating it once if it does not exist yet. */
+    /**
+     * Returns the quiz for $date. With QUIZ_AUTO_GENERATE on, a missing quiz is generated through
+     * OpenRouter; with it off (quizzes are written by the Claude agent, see agents/), the latest
+     * earlier quiz is returned instead.
+     */
     public function forDate(string $date): Quiz
     {
         if ($quiz = Quiz::whereDate('date', $date)->first()) {
             return $quiz;
+        }
+
+        if (! config('services.quiz.auto_generate')) {
+            return Quiz::whereDate('date', '<=', $date)->orderByDesc('date')->firstOrFail();
         }
 
         // Only one request generates; concurrent visitors wait for it and then read the result.
@@ -62,30 +70,45 @@ class QuizGenerator
                 continue;
             }
 
-            return DB::transaction(function () use ($date, $data, $replace) {
-                if ($replace) {
-                    Quiz::whereDate('date', $date)->delete();
-                }
-
-                $quiz = Quiz::create(['date' => $date, 'title' => $data['title'], 'intro' => $data['intro']]);
-
-                foreach ($data['questions'] as $index => $question) {
-                    QuizQuestion::create([
-                        'quiz_id' => $quiz->id,
-                        'position' => $index + 1,
-                        'topic' => $question['topic'],
-                        'question' => $question['question'],
-                        'options' => $question['options'],
-                        'correct_index' => $question['correct'],
-                        'explanation' => $question['explanation'],
-                    ]);
-                }
-
-                return $quiz;
-            });
+            return $this->store($date, $data, $replace);
         }
 
         throw new RuntimeException(implode(' | ', $errors));
+    }
+
+    /**
+     * Validates and saves a quiz written elsewhere (the Claude agent via POST /api/quizzes).
+     *
+     * @throws RuntimeException when the questions do not pass validation
+     */
+    public function storeExternal(string $date, array $data, bool $replace = false): Quiz
+    {
+        return $this->store($date, $this->validate($data), $replace);
+    }
+
+    private function store(string $date, array $data, bool $replace): Quiz
+    {
+        return DB::transaction(function () use ($date, $data, $replace) {
+            if ($replace) {
+                Quiz::whereDate('date', $date)->delete();
+            }
+
+            $quiz = Quiz::create(['date' => $date, 'title' => $data['title'], 'intro' => $data['intro']]);
+
+            foreach ($data['questions'] as $index => $question) {
+                QuizQuestion::create([
+                    'quiz_id' => $quiz->id,
+                    'position' => $index + 1,
+                    'topic' => $question['topic'],
+                    'question' => $question['question'],
+                    'options' => $question['options'],
+                    'correct_index' => $question['correct'],
+                    'explanation' => $question['explanation'],
+                ]);
+            }
+
+            return $quiz;
+        });
     }
 
     /** @return array{title: string, intro: string, questions: list<array{topic: string, question: string, options: list<string>, correct: int, explanation: string}>} */

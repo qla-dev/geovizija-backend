@@ -15,6 +15,12 @@ The backend redeploy does not run migrations. A release that adds a migration ne
 
 The host's MySQL defaults to MyISAM with a 1000-byte key limit; `config/database.php` forces InnoDB and `AppServiceProvider` sets `Schema::defaultStringLength(191)`. Keep both.
 
+# Content agent
+
+Articles and daily quizzes are meant to be written by a scheduled Claude agent through the admin API; the playbooks are in `agents/` (README, daily-quiz, new-article, routine-prompt). Claude writes all text; the backend's OpenRouter services only draw images. `QUIZ_AUTO_GENERATE=false` (default) turns off OpenRouter quiz generation: a day without a quiz serves the latest one. The OpenRouter text generators (`posts:generate-content`, `quizzes:generate`) remain as a fallback.
+
+Keep `agents/*.md` in sync when changing the endpoints, validation or body format they describe.
+
 # Post images
 
 `App\Services\PostImageGenerator` draws 16:9 cover images through OpenRouter (`OPENROUTER_IMAGE_MODEL`, default `google/gemini-2.5-flash-image`), saves them as JPEG in `public/media/posts` (gitignored, lives only on the server) and stores the relative path in `posts.image_url`; `PostResource` makes it absolute.

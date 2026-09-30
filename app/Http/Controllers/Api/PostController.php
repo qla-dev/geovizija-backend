@@ -61,7 +61,14 @@ class PostController extends Controller
 
     public function update(Request $request, Post $post)
     {
+        $oldImages = PostImageGenerator::inlinePaths((string) $post->content);
+
         $post->update($this->validated($request, $post));
+
+        // In-text images the new body no longer references are deleted.
+        foreach (array_diff($oldImages, PostImageGenerator::inlinePaths((string) $post->content)) as $path) {
+            File::delete(public_path($path));
+        }
 
         return new PostResource($post->load('category'));
     }

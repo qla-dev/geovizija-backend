@@ -35,6 +35,12 @@ return [
         ],
     ],
 
+    // Off: quizzes come from the Claude agent (POST /api/quizzes); a missing day shows the latest quiz.
+    // On: the first visitor of a day without a quiz triggers OpenRouter generation.
+    'quiz' => [
+        'auto_generate' => (bool) env('QUIZ_AUTO_GENERATE', false),
+    ],
+
     'admin' => [
         'token' => env('ADMIN_API_TOKEN'),
     ],

@@ -48,7 +48,36 @@ class QuizController extends Controller
         return response()->json(['data' => $this->full($quiz)]);
     }
 
-    /** Admin: (re)generate the quiz for a date (default today). */
+    /**
+     * Admin: store a quiz written outside the app (the Claude agent, see agents/daily-quiz.md).
+     * Body: {date?, title, intro, questions: [{topic, question, options[4], correct 0-3, explanation}], replace?}
+     */
+    public function store(Request $request, QuizGenerator $generator)
+    {
+        $input = $request->validate([
+            'date' => ['nullable', 'date_format:Y-m-d'],
+            'title' => ['required', 'string', 'max:255'],
+            'intro' => ['nullable', 'string', 'max:500'],
+            'questions' => ['required', 'array', 'min:'.QuizGenerator::QUESTIONS],
+            'replace' => ['sometimes', 'boolean'],
+        ]);
+        $date = $input['date'] ?? QuizGenerator::today();
+        $replace = (bool) ($input['replace'] ?? false);
+
+        if (! $replace && Quiz::whereDate('date', $date)->exists()) {
+            return response()->json(['message' => "A quiz for {$date} already exists. Send \"replace\": true to overwrite it."], 409);
+        }
+
+        try {
+            $quiz = $generator->storeExternal($date, $request->only('title', 'intro', 'questions'), $replace);
+        } catch (RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
+
+        return response()->json(['data' => $this->full($quiz)], 201);
+    }
+
+    /** Admin: (re)generate the quiz for a date (default today) through OpenRouter. */
     public function generate(Request $request, QuizGenerator $generator)
     {
         $date = $request->validate(['date' => ['nullable', 'date_format:Y-m-d']])['date'] ?? QuizGenerator::today();

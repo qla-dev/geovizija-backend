@@ -7,6 +7,7 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-// Pre-generate the daily quiz shortly after midnight (needs `php artisan schedule:run` in cron).
-// Without cron, the first visitor of the day triggers generation through GET /api/quizzes/today.
-Illuminate\Support\Facades\Schedule::command('quizzes:generate')->dailyAt('00:05')->timezone('Europe/Sarajevo');
+// OpenRouter quiz generation shortly after midnight, only when QUIZ_AUTO_GENERATE is on (needs
+// `php artisan schedule:run` in cron). By default the Claude agent writes quizzes (agents/daily-quiz.md).
+Illuminate\Support\Facades\Schedule::command('quizzes:generate')->dailyAt('00:05')->timezone('Europe/Sarajevo')
+    ->when(fn () => (bool) config('services.quiz.auto_generate'));

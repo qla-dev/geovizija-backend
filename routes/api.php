@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AgentController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\PostController;
 use App\Http\Controllers\Api\QuizController;
@@ -20,5 +21,7 @@ Route::middleware(EnsureAdminToken::class)->group(function () {
     Route::post('/posts/{post}/generate-image', [PostController::class, 'generateImage']);
     Route::post('/posts/{post}/generate-content', [PostController::class, 'generateContent']);
     Route::post('/posts/{post}/generate-inline-image', [PostController::class, 'generateInlineImage']);
+    Route::post('/quizzes', [QuizController::class, 'store']);
     Route::post('/quizzes/generate', [QuizController::class, 'generate']);
+    Route::get('/agent/context', [AgentController::class, 'context']);
 });
