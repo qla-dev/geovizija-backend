@@ -58,6 +58,8 @@ Admin (`Authorization: Bearer <ADMIN_API_TOKEN>`):
 | POST / PATCH / DELETE | `/api/categories[/{slug}]` | `slug, name, color, image_url, sort_order` |
 | POST / PATCH / DELETE | `/api/posts[/{id or slug}]` | `category (slug), title, slug?, excerpt, content, image_url, author, read_time?, featured, published_at` |
 
+`POST /api/posts/{id or slug}/generate-image` (admin) generates a new cover through OpenRouter and returns the updated post.
+
 A post is public once `published_at` is set and not in the future. Deleting a category that still has posts returns 409.
 
 Responses use the frontend's field names (`categoryId`, `imageUrl`, `readTime`, `date` like `12. Oktobar 2026`).

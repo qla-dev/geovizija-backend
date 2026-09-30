@@ -15,6 +15,15 @@ The backend redeploy does not run migrations. A release that adds a migration ne
 
 The host's MySQL defaults to MyISAM with a 1000-byte key limit; `config/database.php` forces InnoDB and `AppServiceProvider` sets `Schema::defaultStringLength(191)`. Keep both.
 
+# Post images
+
+`App\Services\PostImageGenerator` draws 16:9 cover images through OpenRouter (`OPENROUTER_IMAGE_MODEL`, default `google/gemini-2.5-flash-image`), saves them as JPEG in `public/media/posts` (gitignored, lives only on the server) and stores the relative path in `posts.image_url`; `PostResource` makes it absolute.
+
+- On the server: `POST https://geovizija.com/endpoints/api/posts/{id}/generate-image` with `Authorization: Bearer <ADMIN_API_TOKEN>`
+- CLI: `php artisan posts:generate-images [ids...] [--force]` — writes files to the machine it runs on, so running it locally against the production DB points posts at images that do not exist on the server.
+
+Each generation is a paid OpenRouter call.
+
 # Database safety — mandatory
 
 `.env` may point at the live production database (`tagnetba_geovizija` on the remote host). Never assume a command is safe because of an environment name.
