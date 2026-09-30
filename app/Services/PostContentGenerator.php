@@ -28,15 +28,15 @@ class PostContentGenerator
             (string) config('services.openrouter.fallback_model'),
         ])));
 
-        $lastError = 'The text generator did not return an article.';
+        $errors = [];
 
         // The primary model occasionally returns a short or malformed article: retry it, then try the fallback.
-        foreach ([$models[0], $models[0], ...array_slice($models, 1)] as $model) {
+        foreach ([$models[0], $models[0], $models[0], ...array_slice($models, 1)] as $model) {
             try {
                 $article = $this->request($post, $model, $apiKey);
             } catch (RuntimeException $exception) {
-                $lastError = $exception->getMessage();
-                Log::warning('Post content generation failed.', ['post_id' => $post->id, 'model' => $model, 'error' => $lastError]);
+                $errors[] = "{$model}: {$exception->getMessage()}";
+                Log::warning('Post content generation failed.', ['post_id' => $post->id, 'model' => $model, 'error' => $exception->getMessage()]);
 
                 continue;
             }
@@ -50,7 +50,7 @@ class PostContentGenerator
             return $post;
         }
 
-        throw new RuntimeException($lastError);
+        throw new RuntimeException(implode(' | ', $errors));
     }
 
     /** @return array{excerpt: string, content: string} */
