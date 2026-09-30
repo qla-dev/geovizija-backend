@@ -65,7 +65,6 @@ class PostContentGenerator
                 ->withHeaders(['HTTP-Referer' => config('app.url'), 'X-Title' => 'Geovizija post content'])
                 ->post((string) config('services.openrouter.url'), [
                     'model' => $model,
-                    'response_format' => ['type' => 'json_object'],
                     'messages' => [
                         ['role' => 'system', 'content' => $this->instructions()],
                         ['role' => 'user', 'content' => 'Kategorija: '.($post->category?->name ?? 'Općenito')
@@ -82,17 +81,19 @@ class PostContentGenerator
             throw new RuntimeException(data_get($response->json(), 'error.message') ?: "The text generator returned HTTP {$response->status()}.");
         }
 
-        $raw = (string) data_get($response->json(), 'choices.0.message.content');
-        $raw = preg_replace('/^```(?:json)?\s*|\s*```$/', '', trim($raw));
-        $article = json_decode((string) $raw, true);
+        // Plain-text answer: "UVOD: <excerpt>", a "---" line, then the article. (JSON mode broke on
+        // Gemini putting raw newlines inside the content string.)
+        $raw = str_replace("\r\n", "\n", trim((string) data_get($response->json(), 'choices.0.message.content')));
+        $raw = trim((string) preg_replace('/^```\w*\s*|\s*```$/', '', $raw));
         $finish = (string) data_get($response->json(), 'choices.0.finish_reason');
 
-        if (! is_array($article)) {
-            throw new RuntimeException('The text generator returned invalid JSON ('.json_last_error_msg().", finish: {$finish}, ".strlen((string) $raw).' chars).');
+        $parts = preg_split('/^\s*-{3,}\s*$/m', $raw, 2);
+        if (count($parts) !== 2) {
+            throw new RuntimeException("The text generator did not use the expected format (finish: {$finish}).");
         }
 
-        $excerpt = trim((string) data_get($article, 'excerpt'));
-        $content = trim(str_replace("\r\n", "\n", (string) data_get($article, 'content')));
+        $excerpt = trim((string) preg_replace('/^\s*(UVOD|EXCERPT)\s*:\s*/iu', '', $parts[0]));
+        $content = trim($parts[1]);
 
         if ($excerpt === '' || self::words($content) < 400) {
             throw new RuntimeException('The text generator returned an incomplete article ('.self::words($content)." words, finish: {$finish}).");
@@ -121,9 +122,12 @@ Zahtjevi:
 - Konkretni detalji o mjestima, vrstama, procesima i historijskom kontekstu, ali samo općepoznate i provjerljive činjenice.
 - Ne izmišljaj citate stvarnih osoba, imena stručnjaka, institucija ni precizne statistike koje nisu općepoznate.
 - Završi pasusom koji povezuje temu s čitaocem ili budućnošću.
-- "excerpt": 1 do 2 rečenice (do 220 znakova) koje najavljuju članak.
+- Uvod (excerpt): 1 do 2 rečenice (do 220 znakova) koje najavljuju članak.
 
-Vrati isključivo JSON objekat: {"excerpt": "...", "content": "..."}
+Odgovori isključivo u ovom formatu, bez ikakvog drugog teksta:
+UVOD: <uvod u jednom redu>
+---
+<cijeli tekst članka>
 TXT;
     }
 }
