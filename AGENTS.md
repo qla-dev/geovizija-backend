@@ -26,9 +26,10 @@ Each generation is a paid OpenRouter call.
 
 # Post content
 
-`App\Services\PostContentGenerator` rewrites a post's excerpt and body into a 900–1300 word Bosnian (ijekavica) magazine article through `OPENROUTER_MODEL`; title and slug are kept. Body format: paragraphs separated by blank lines, subheadings as lines starting with `## ` (rendered by the frontend's `ArticlePage`). It retries the primary model once before `OPENROUTER_FALLBACK_MODEL`.
+`App\Services\PostContentGenerator` rewrites a post's excerpt and body into a 450–650 word Bosnian (ijekavica) magazine article through `OPENROUTER_MODEL`; title and slug are kept. Body format (rendered by the frontend's `ArticlePage`): one block per line — paragraphs, subheadings starting with `## `, and exactly two in-text images. The generator writes those as `[[SLIKA: scene description]]` marker lines (validated); `PostImageGenerator::generateNextInline()` draws one marker per call and replaces it with `![caption](media/posts/...)`. `PostResource` makes those paths absolute and hides pending markers. Regenerating the text deletes the previous inline images. The primary model is tried three times before `OPENROUTER_FALLBACK_MODEL`.
 
 - On the server: `POST https://geovizija.com/endpoints/api/posts/{id}/generate-content` (admin token)
+- Then `POST .../posts/{id}/generate-inline-image` until the response has `"pending": 0` (one image per call)
 - CLI: `php artisan posts:generate-content {ids...}` — writes to whatever database `.env` points at.
 
 Generated text can contain inaccurate specifics; the prompt forbids invented quotes and statistics, but review before relying on figures. The original short texts remain in `database/seeders/data/posts.json`.
