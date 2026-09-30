@@ -1,0 +1,158 @@
+[
+  {
+    "id": "1",
+    "title": "Posljednje prašume Europe: Skriveni dragulji Balkana",
+    "excerpt": "Duboko u planinama Balkana leže posljednji ostaci drevnih šuma koje su nekada prekrivale kontinent. Otkrivamo tajne Perućice.",
+    "content": "Prašuma Perućica, smještena u Nacionalnom parku Sutjeska, jedno je od posljednjih očuvanih prašumskih područja u Europi. Ovo jedinstveno stanište dom je stoljetnim stablima bukve, jele i smreke, od kojih neka dosežu visinu i do 60 metara.\n\nZnanstvenici upozoravaju da je očuvanje ovakvih ekosustava ključno za razumijevanje prirodnih procesa neometanih ljudskom rukom. Bogatstvo bioraznolikosti ovdje je neprocjenjivo - od rijetkih vrsta lišajeva do mrkog medvjeda i vuka koji ovdje nalaze sigurno utočište.\n\nUnatoč strogim mjerama zaštite, klimatske promjene prijete i ovom netaknutom kutku. Suše i invazivne vrste polako mijenjaju strukturu šume, stoga je međunarodna suradnja na očuvanju Perućice važnija nego ikad.",
+    "categoryId": "priroda",
+    "imageUrl": "https://images.unsplash.com/photo-1500829243541-760591185ed7?auto=format&fit=crop&q=80",
+    "author": "Enisa K.",
+    "date": "12. Oktobar 2026",
+    "readTime": 5,
+    "featured": true
+  },
+  {
+    "id": "2",
+    "title": "Revolucija zelenog vodika u Hrvatskoj",
+    "excerpt": "Kako nova tehnologija može transformirati energetski sektor i smanjiti ovisnost o fosilnim gorivima.",
+    "content": "Hrvatska ima ogroman potencijal za proizvodnju zelenog vodika zahvaljujući obilju sunčeve energije i vjetra...",
+    "categoryId": "tehnologija",
+    "imageUrl": "https://picsum.photos/seed/tech1/800/600",
+    "author": "Enisa K.",
+    "date": "10. Oktobar 2026",
+    "readTime": 3
+  },
+  {
+    "id": "3",
+    "title": "Nestajanje sela: Demografski izazovi 21. stoljeća",
+    "excerpt": "Analiza migracijskih trendova i njihov utjecaj na ruralna područja i poljoprivrednu proizvodnju.",
+    "content": "Ruralna područja suočavaju se s depopulacijom bez presedana...",
+    "categoryId": "stanovnistvo",
+    "imageUrl": "https://picsum.photos/seed/people1/800/600",
+    "author": "Enisa K.",
+    "date": "09. Oktobar 2026",
+    "readTime": 7
+  },
+  {
+    "id": "4",
+    "title": "Eko-škole: Budućnost obrazovanja",
+    "excerpt": "Program koji uči djecu važnosti održivog razvoja kroz praktičan rad u vrtu i zajednici.",
+    "content": "Učenici osnovne škole u Osijeku sami uzgajaju hranu za svoju kuhinju...",
+    "categoryId": "skolstvo",
+    "imageUrl": "https://picsum.photos/seed/school1/800/600",
+    "author": "Enisa K.",
+    "date": "08. Oktobar 2026",
+    "readTime": 4
+  },
+  {
+    "id": "5",
+    "title": "Tajni život pčela u urbanim sredinama",
+    "excerpt": "Zašto su gradovi postali neočekivana utočišta za oprašivače i kako im možemo pomoći.",
+    "content": "Urbano pčelarstvo doživljava procvat na krovovima zgrada...",
+    "categoryId": "zanimljivosti",
+    "imageUrl": "https://picsum.photos/seed/bees1/800/600",
+    "author": "Enisa K.",
+    "date": "07. Oktobar 2026",
+    "readTime": 2
+  },
+  {
+    "id": "6",
+    "title": "Održiva moda: Kulturni fenomen ili nužnost?",
+    "excerpt": "Kako dizajneri koriste reciklirane materijale da bi stvorili visoku modu bez otpada.",
+    "content": "Tjedan mode u Zagrebu ove je godine bio posvećen održivosti...",
+    "categoryId": "kultura",
+    "imageUrl": "https://picsum.photos/seed/fashion1/800/600",
+    "author": "Enisa K.",
+    "date": "05. Oktobar 2026",
+    "readTime": 6
+  },
+  {
+    "id": "7",
+    "title": "Povratak risa u Dinaride",
+    "excerpt": "Međunarodni projekt LIFE Lynx uspješno je naselio nove jedinke risa u hrvatske šume.",
+    "content": "Ris je jedna od najugroženijih vrsta u Europi...",
+    "categoryId": "priroda",
+    "imageUrl": "https://picsum.photos/seed/nature3/800/600",
+    "author": "Enisa K.",
+    "date": "04. Oktobar 2026",
+    "readTime": 4
+  },
+  {
+    "id": "8",
+    "title": "Pametni gradovi i gospodarenje otpadom",
+    "excerpt": "Senzori u kontejnerima i AI optimizacija ruta kamiona smanjuju emisije CO2 u gradovima.",
+    "content": "Tehnologija interneta stvari (IoT) mijenja način na koji upravljamo komunalnim uslugama...",
+    "categoryId": "tehnologija",
+    "imageUrl": "https://picsum.photos/seed/city1/800/600",
+    "author": "Enisa K.",
+    "date": "03. Oktobar 2026",
+    "readTime": 3
+  },
+  {
+    "id": "9",
+    "title": "Drevne sorte jabuka: Čuvari genetike",
+    "excerpt": "Zašto je važno sačuvati stare sorte voća od zaborava i kako one pomažu u borbi protiv bolesti.",
+    "content": "U malom voćnjaku pokraj Varaždina raste preko 50 sorti jabuka koje nećete naći u supermarketima...",
+    "categoryId": "priroda",
+    "imageUrl": "https://picsum.photos/seed/fruit1/800/600",
+    "author": "Enisa K.",
+    "date": "02. Oktobar 2026",
+    "readTime": 5
+  },
+  {
+    "id": "10",
+    "title": "Arhitektura budućnosti: Zgrade koje dišu",
+    "excerpt": "Biomimikrija u arhitekturi donosi rješenja inspirirana prirodom za hlađenje i ventilaciju.",
+    "content": "Termitnjaci su poslužili kao inspiracija za pasivno hlađenje velikih uredskih zgrada...",
+    "categoryId": "tehnologija",
+    "imageUrl": "https://picsum.photos/seed/arch1/800/600",
+    "author": "Enisa K.",
+    "date": "01. Oktobar 2026",
+    "readTime": 6
+  },
+  {
+    "id": "11",
+    "title": "Najbolje destinacije za 2026. godinu",
+    "excerpt": "Od skrivenih plaža Albanije do planinskih vrhova Kirgistana - ovo su mjesta koja morate posjetiti.",
+    "content": "Svake godine naš tim stručnjaka bira destinacije...",
+    "categoryId": "putovanja",
+    "imageUrl": "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&q=80",
+    "author": "Enisa K.",
+    "date": "15. Oktobar 2026",
+    "readTime": 8,
+    "featured": true
+  },
+  {
+    "id": "12",
+    "title": "Patagonija izvan sezone",
+    "excerpt": "Zašto je posjet jugu Čilea i Argentine najbolji kada nema gužvi, unatoč vjetru.",
+    "content": "Patagonija je divlja i nepredvidiva...",
+    "categoryId": "putovanja",
+    "imageUrl": "https://images.unsplash.com/photo-1518182170546-0766ba6f6a56?auto=format&fit=crop&q=80",
+    "author": "Enisa K.",
+    "date": "14. Oktobar 2026",
+    "readTime": 6
+  },
+  {
+    "id": "13",
+    "title": "Skriveni dragulji Portugala",
+    "excerpt": "Sela u unutrašnjosti koja čuvaju tradiciju i nude autentično iskustvo.",
+    "content": "Dok svi hrle u Lisabon i Porto...",
+    "categoryId": "putovanja",
+    "imageUrl": "https://images.unsplash.com/photo-1555881400-74d7acaacd81?auto=format&fit=crop&q=80",
+    "author": "Enisa K.",
+    "date": "13. Oktobar 2026",
+    "readTime": 5
+  },
+  {
+    "id": "14",
+    "title": "Održivi turizam u Kostariki",
+    "excerpt": "Kako ova mala zemlja predvodi svijet u ekološki osviještenom putovanju.",
+    "content": "Pura Vida nije samo uzrečica...",
+    "categoryId": "putovanja",
+    "imageUrl": "https://images.unsplash.com/photo-1519076894081-304d776856da?auto=format&fit=crop&q=80",
+    "author": "Enisa K.",
+    "date": "11. Oktobar 2026",
+    "readTime": 4
+  }
+]

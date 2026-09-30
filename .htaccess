@@ -1,0 +1,12 @@
+# Override the frontend's inherited DirectoryIndex (dist/index.html).
+DirectoryIndex index.php
+
+<IfModule mod_rewrite.c>
+    <IfModule mod_negotiation.c>
+        Options -MultiViews -Indexes
+    </IfModule>
+
+    RewriteEngine On
+    RewriteRule ^public(?:/|$) - [L]
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>

@@ -1,0 +1,50 @@
+[
+  {
+    "id": "priroda",
+    "name": "Priroda",
+    "color": "bg-emerald-600",
+    "imageUrl": "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&q=80"
+  },
+  {
+    "id": "putovanja",
+    "name": "Putovanja",
+    "color": "bg-teal-600",
+    "imageUrl": "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&q=80"
+  },
+  {
+    "id": "drustvo",
+    "name": "Društvo",
+    "color": "bg-blue-600",
+    "imageUrl": "https://images.unsplash.com/photo-1573164713988-8665fc963095?auto=format&fit=crop&q=80"
+  },
+  {
+    "id": "tehnologija",
+    "name": "Tehnologija",
+    "color": "bg-cyan-600",
+    "imageUrl": "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80"
+  },
+  {
+    "id": "kultura",
+    "name": "Kultura",
+    "color": "bg-purple-600",
+    "imageUrl": "https://images.unsplash.com/photo-1514539079130-25950c84af65?auto=format&fit=crop&q=80"
+  },
+  {
+    "id": "stanovnistvo",
+    "name": "Stanovništvo",
+    "color": "bg-orange-600",
+    "imageUrl": "https://images.unsplash.com/photo-1490578474895-699cd4e2cf59?auto=format&fit=crop&q=80"
+  },
+  {
+    "id": "zanimljivosti",
+    "name": "Zanimljivosti",
+    "color": "bg-yellow-500",
+    "imageUrl": "https://images.unsplash.com/photo-1516979187457-637abb4f9353?auto=format&fit=crop&q=80"
+  },
+  {
+    "id": "skolstvo",
+    "name": "Školstvo",
+    "color": "bg-indigo-600",
+    "imageUrl": "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&q=80"
+  }
+]
