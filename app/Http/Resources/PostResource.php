@@ -22,7 +22,13 @@ class PostResource extends JsonResource
             'slug' => $this->slug,
             'title' => $this->title,
             'excerpt' => $this->excerpt,
-            'content' => $this->content,
+            // In-text images are "![caption](media/posts/...)" lines: make their paths absolute and
+            // hide markers whose image has not been generated yet.
+            'content' => preg_replace_callback(
+                '#^!\[([^\]]*)\]\(((?!https?://)[^)\s]+)\)$#m',
+                fn ($m) => "![{$m[1]}](".asset($m[2]).')',
+                (string) preg_replace('/^\[\[SLIKA:.*\]\]\R?/mu', '', (string) $this->content),
+            ),
             'categoryId' => $this->category?->slug,
             'category' => new CategoryResource($this->whenLoaded('category')),
             // Generated images are stored as paths relative to public/ (see PostImageGenerator).

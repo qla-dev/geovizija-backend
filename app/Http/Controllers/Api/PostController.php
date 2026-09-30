@@ -75,6 +75,21 @@ class PostController extends Controller
         return new PostResource($post->refresh()->load('category'));
     }
 
+    /**
+     * Draws the next pending in-text image ("[[SLIKA: ...]]" marker). Call repeatedly until
+     * `pending` is 0; one image per request keeps each call short.
+     */
+    public function generateInlineImage(Post $post, PostImageGenerator $generator)
+    {
+        try {
+            $path = $generator->generateNextInline($post);
+        } catch (RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage(), 'pending' => PostImageGenerator::pendingInline($post)], 502);
+        }
+
+        return response()->json(['generated' => $path, 'pending' => PostImageGenerator::pendingInline($post->refresh())]);
+    }
+
     /** Rewrites the excerpt and body into a full article through OpenRouter. */
     public function generateContent(Post $post, PostContentGenerator $generator)
     {

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Post;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -41,11 +42,18 @@ class PostContentGenerator
                 continue;
             }
 
+            // Inline images of the text being replaced are no longer referenced.
+            $oldImages = PostImageGenerator::inlinePaths((string) $post->content);
+
             $post->update([
                 'excerpt' => $article['excerpt'],
                 'content' => $article['content'],
-                'read_time' => max(1, (int) ceil(self::words($article['content']) / 200)),
+                'read_time' => max(1, (int) ceil(self::words(self::textOnly($article['content'])) / 200)),
             ]);
+
+            foreach ($oldImages as $path) {
+                File::delete(public_path($path));
+            }
 
             return $post;
         }
@@ -95,11 +103,22 @@ class PostContentGenerator
         $excerpt = trim((string) preg_replace('/^\s*(UVOD|EXCERPT)\s*:\s*/iu', '', $parts[0]));
         $content = trim($parts[1]);
 
-        if ($excerpt === '' || self::words($content) < 400) {
+        $markers = preg_match_all(PostImageGenerator::INLINE_MARKER, $content);
+        if ($markers !== 2) {
+            throw new RuntimeException("The text generator returned {$markers} image markers instead of 2 (finish: {$finish}).");
+        }
+
+        if ($excerpt === '' || self::words(self::textOnly($content)) < 300) {
             throw new RuntimeException('The text generator returned an incomplete article ('.self::words($content)." words, finish: {$finish}).");
         }
 
         return ['excerpt' => $excerpt, 'content' => $content];
+    }
+
+    /** Body text without image markers or image lines. */
+    public static function textOnly(string $content): string
+    {
+        return (string) preg_replace(['/^\[\[SLIKA:.*\]\]$/mu', '/^!\[[^\]]*\]\([^)]*\)$/mu'], '', $content);
     }
 
     /** Word count that handles non-ASCII letters (str_word_count splits on č, š, ž...). */
@@ -115,13 +134,14 @@ Ti si urednik Geovizije, bosanskohercegovačkog magazina o prirodi, geografiji, 
 Na osnovu naslova i postojećeg kratkog teksta napiši potpun, zanimljiv i informativan članak na bosanskom jeziku (ijekavica, latinica).
 
 Zahtjevi:
-- Dužina teksta: 900 do 1300 riječi.
+- Dužina teksta: 450 do 650 riječi (kratko, zbijeno i zanimljivo).
 - Počni snažnim uvodnim pasusom koji uvlači čitaoca (scena, pitanje ili upečatljiva činjenica), bez ponavljanja naslova.
-- 3 do 5 podnaslova; svaki podnaslov je zaseban red koji počinje sa "## ".
+- 2 do 3 podnaslova; svaki podnaslov je zaseban red koji počinje sa "## ".
 - Pasusi i podnaslovi su odvojeni praznim redom. Bez markdowna osim "## " (bez podebljanja, lista, linkova, emojija).
 - Konkretni detalji o mjestima, vrstama, procesima i historijskom kontekstu, ali samo općepoznate i provjerljive činjenice.
 - Ne izmišljaj citate stvarnih osoba, imena stručnjaka, institucija ni precizne statistike koje nisu općepoznate.
 - Završi pasusom koji povezuje temu s čitaocem ili budućnošću.
+- Ubaci tačno 2 fotografije u tekst: svaka je zaseban red oblika [[SLIKA: kratak opis scene na bosanskom]]. Prvu stavi nakon drugog pasusa, drugu prije posljednjeg podnaslova. Opis je konkretna scena koja se razlikuje od naslovne fotografije (npr. "Mrki medvjed u bukovoj šumi Sutjeske u zoru").
 - Uvod (excerpt): 1 do 2 rečenice (do 220 znakova) koje najavljuju članak.
 
 Odgovori isključivo u ovom formatu, bez ikakvog drugog teksta:
