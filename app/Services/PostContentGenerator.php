@@ -17,6 +17,8 @@ use RuntimeException;
  */
 class PostContentGenerator
 {
+    public const MAX_WORDS = 750;
+
     public function generate(Post $post): Post
     {
         $apiKey = (string) config('services.openrouter.api_key');
@@ -32,7 +34,7 @@ class PostContentGenerator
         $errors = [];
 
         // The primary model occasionally returns a short or malformed article: retry it, then try the fallback.
-        foreach ([$models[0], $models[0], $models[0], ...array_slice($models, 1)] as $model) {
+        foreach ([$models[0], $models[0], $models[0], $models[0], ...array_slice($models, 1)] as $model) {
             try {
                 $article = $this->request($post, $model, $apiKey);
             } catch (RuntimeException $exception) {
@@ -108,8 +110,14 @@ class PostContentGenerator
             throw new RuntimeException("The text generator returned {$markers} image markers instead of 2 (finish: {$finish}).");
         }
 
-        if ($excerpt === '' || self::words(self::textOnly($content)) < 300) {
-            throw new RuntimeException('The text generator returned an incomplete article ('.self::words($content)." words, finish: {$finish}).");
+        $words = self::words(self::textOnly($content));
+        if ($excerpt === '' || $words < 300) {
+            throw new RuntimeException("The text generator returned an incomplete article ({$words} words, finish: {$finish}).");
+        }
+
+        // The model tends to overshoot the requested length; reject and retry rather than store it.
+        if ($words > self::MAX_WORDS) {
+            throw new RuntimeException("The text generator returned {$words} words (max ".self::MAX_WORDS.').');
         }
 
         return ['excerpt' => $excerpt, 'content' => $content];
@@ -134,9 +142,9 @@ Ti si urednik Geovizije, bosanskohercegovačkog magazina o prirodi, geografiji, 
 Na osnovu naslova i postojećeg kratkog teksta napiši potpun, zanimljiv i informativan članak na bosanskom jeziku (ijekavica, latinica).
 
 Zahtjevi:
-- Dužina teksta: 450 do 650 riječi (kratko, zbijeno i zanimljivo).
+- Dužina teksta: 450 do 600 riječi — strogo, nikako duže. Najviše 6 pasusa, svaki pasus 3 do 4 rečenice.
 - Počni snažnim uvodnim pasusom koji uvlači čitaoca (scena, pitanje ili upečatljiva činjenica), bez ponavljanja naslova.
-- 2 do 3 podnaslova; svaki podnaslov je zaseban red koji počinje sa "## ".
+- Tačno 2 podnaslova; svaki podnaslov je zaseban red koji počinje sa "## ".
 - Pasusi i podnaslovi su odvojeni praznim redom. Bez markdowna osim "## " (bez podebljanja, lista, linkova, emojija).
 - Konkretni detalji o mjestima, vrstama, procesima i historijskom kontekstu, ali samo općepoznate i provjerljive činjenice.
 - Ne izmišljaj citate stvarnih osoba, imena stručnjaka, institucija ni precizne statistike koje nisu općepoznate.

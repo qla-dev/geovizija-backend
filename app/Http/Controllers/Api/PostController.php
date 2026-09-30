@@ -16,6 +16,8 @@ use RuntimeException;
 
 class PostController extends Controller
 {
+    public const DEFAULT_AUTHOR = 'Kulašin';
+
     /**
      * Published posts, newest first.
      * Filters: ?category=<slug>, ?featured=1, ?search=<text>, ?per_page=<1-100>.
@@ -49,6 +51,7 @@ class PostController extends Controller
         $data = $this->validated($request);
         $data['slug'] ??= $this->uniqueSlug($data['title']);
         $data['featured'] ??= false;
+        $data['author'] ??= self::DEFAULT_AUTHOR;
         $data['read_time'] ??=max(1, (int) ceil(str_word_count(strip_tags($data['content'])) / 200));
 
         $post = Post::create($data);
