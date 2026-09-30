@@ -180,10 +180,10 @@ Pravila:
 - Mješavina tema: geografija svijeta (države, glavni gradovi, rijeke, planine, pustinje), Bosna i Hercegovina i region, priroda i životinje, klima i Zemlja, putovanja i kultura, istorija otkrića.
 - Mješavina težine: 3 lagana, 4 srednja, 3 teška pitanja.
 - Svako pitanje ima tačno 4 kratka odgovora, samo jedan je tačan, ostali su uvjerljivi ali nedvosmisleno netačni.
-- Samo općepoznate, provjerljive i stabilne činjenice. Bez pitanja o aktuelnim događajima, statistikama koje se mijenjaju ili spornim tvrdnjama.
-- "explanation": jedna zanimljiva rečenica koja objašnjava tačan odgovor.
+- Samo općepoznate, provjerljive i stabilne činjenice. Bez pitanja o aktuelnim događajima, statistikama koje se mijenjaju ili spornim tvrdnjama (npr. da li je Nil ili Amazon najduža rijeka svijeta) — ni u pitanju ni u objašnjenju.
+- "explanation": jedna zanimljiva rečenica koja objašnjava tačan odgovor; ne smije sadržavati netačne ni sporne tvrdnje.
 - "topic": jedna ili dvije riječi (npr. "Geografija", "Životinje", "BiH").
-- "title": kratak, zanimljiv naslov kviza (do 60 znakova); "intro": jedna rečenica najave.
+- "title": kratak, maštovit naslov (do 50 znakova) koji dočarava temu ovog kviza, npr. "Od Sahare do Sjevernog pola"; bez riječi "Geovizija" i "kviz". "intro": jedna rečenica najave.
 - Sav tekst u jednom redu, bez prelazaka u novi red.
 
 Vrati isključivo JSON:
