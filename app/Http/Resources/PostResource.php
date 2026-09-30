@@ -25,7 +25,10 @@ class PostResource extends JsonResource
             'content' => $this->content,
             'categoryId' => $this->category?->slug,
             'category' => new CategoryResource($this->whenLoaded('category')),
-            'imageUrl' => $this->image_url,
+            // Generated images are stored as paths relative to public/ (see PostImageGenerator).
+            'imageUrl' => $this->image_url && ! preg_match('#^https?://#', $this->image_url)
+                ? asset($this->image_url)
+                : $this->image_url,
             'author' => $this->author,
             'date' => $publishedAt
                 ? $publishedAt->format('d').'. '.self::MONTHS[$publishedAt->month].' '.$publishedAt->format('Y')

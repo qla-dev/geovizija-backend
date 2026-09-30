@@ -6,9 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\PostResource;
 use App\Models\Category;
 use App\Models\Post;
+use App\Services\PostImageGenerator;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use RuntimeException;
 
 class PostController extends Controller
 {
@@ -59,8 +62,24 @@ class PostController extends Controller
         return new PostResource($post->load('category'));
     }
 
+    /** Generates a new cover image through OpenRouter and stores it on the post. */
+    public function generateImage(Post $post, PostImageGenerator $generator)
+    {
+        try {
+            $generator->generate($post);
+        } catch (RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 502);
+        }
+
+        return new PostResource($post->refresh()->load('category'));
+    }
+
     public function destroy(Post $post)
     {
+        if (PostImageGenerator::isGenerated($post->image_url)) {
+            File::delete(public_path($post->image_url));
+        }
+
         $post->delete();
 
         return response()->noContent();
