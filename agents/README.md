@@ -19,7 +19,7 @@ A ready-to-paste prompt for the scheduled run is in [routine-prompt.md](routine-
 {"secret": "…", "type": "quiz", "date": "2026-10-02", "title": "…", "intro": "…", "questions": [{"topic": "…", "question": "…", "options": ["…","…","…","…"], "correct": 0, "explanation": "…"}]}
 ```
 
-An article is published immediately and its cover and in-text images are drawn in the same request (~1 minute). A quiz for a date that already has one is refused (409). Never write the secret into this repository.
+An article is published immediately and its cover and in-text images are drawn in the same request (~1 minute). Add `"publishedAt": "2026-10-01T14:20:00+02:00"` (ISO 8601) to schedule it: until then it is hidden from the site and from `/posts` (the response says `"scheduled": true`). A quiz for a date that already has one is refused (409). Never write the secret into this repository.
 
 ## Environment
 

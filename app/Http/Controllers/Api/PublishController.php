@@ -11,6 +11,7 @@ use App\Services\PostContentGenerator;
 use App\Services\PostImageGenerator;
 use App\Services\QuizGenerator;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -21,7 +22,7 @@ use Throwable;
  * Publishes a Claude-written article or quiz pasted as JSON (frontend /#/objavi or any HTTP client).
  * The JSON itself carries the publish secret; without the right one nothing is stored.
  *
- *   {"secret": "...", "type": "article", "category": "priroda", "title": "...", "excerpt": "...", "content": "..."}
+ *   {"secret": "...", "type": "article", "category": "priroda", "title": "...", "excerpt": "...", "content": "...", "publishedAt"?: "ISO 8601"}
  *   {"secret": "...", "type": "quiz", "date"?: "Y-m-d", "title": "...", "intro": "...", "questions": [...]}
  */
 class PublishController extends Controller
@@ -48,7 +49,12 @@ class PublishController extends Controller
             'excerpt' => ['required', 'string', 'max:500'],
             'content' => ['required', 'string'],
             'author' => ['nullable', 'string', 'max:255'],
+            // Optional scheduled publication (ISO 8601 with offset, e.g. 2026-10-01T14:20:00+02:00).
+            // Until then the article is hidden from the site and from /posts (Post::published()).
+            'publishedAt' => ['nullable', 'date'],
+            'published_at' => ['nullable', 'date'],
         ]);
+        $publishAt = Carbon::parse($data['publishedAt'] ?? $data['published_at'] ?? 'now');
 
         $content = trim(str_replace("\r\n", "\n", $data['content']));
         $words = PostContentGenerator::words(PostContentGenerator::textOnly($content));
@@ -65,7 +71,7 @@ class PublishController extends Controller
             'author' => $data['author'] ?? PostController::DEFAULT_AUTHOR,
             'read_time' => max(1, (int) ceil($words / 200)),
             'featured' => false,
-            'published_at' => now(),
+            'published_at' => $publishAt,
         ]);
 
         // Images take ~20 s each; keep going even if the browser gives up waiting.
@@ -89,7 +95,11 @@ class PublishController extends Controller
         }
 
         return response()->json([
-            'message' => 'Članak je objavljen.',
+            'message' => $publishAt->isFuture()
+                ? 'Članak je zakazan za '.$publishAt->copy()->setTimezone(QuizGenerator::TIMEZONE)->format('d.m.Y. H:i').' (Sarajevo).'
+                : 'Članak je objavljen.',
+            'publishedAt' => $publishAt->toIso8601String(),
+            'scheduled' => $publishAt->isFuture(),
             'url' => "https://geovizija.com/#/article/{$post->id}",
             'warnings' => $warnings,
             'data' => new PostResource($post->refresh()->load('category')),
