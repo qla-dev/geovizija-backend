@@ -72,6 +72,35 @@ class PostImageGenerator
         return $path;
     }
 
+    /**
+     * Replaces the existing in-text image number $number (1-based, in body order) with the supplied
+     * $source or a new drawing of $description (default: the old caption). The old file is deleted
+     * only after the new one is stored, so a failure leaves the article unchanged.
+     */
+    public function replaceInline(Post $post, int $number, ?string $source = null, ?string $description = null): string
+    {
+        $images = self::inlineImages((string) $post->content);
+        if (! isset($images[$number - 1])) {
+            throw new RuntimeException("Članak nema sliku u tekstu broj {$number} (ima ih ".count($images).').');
+        }
+
+        [$tag, $caption, $previous] = $images[$number - 1];
+        $description = trim((string) $description) ?: $caption;
+        $basename = "{$post->slug}-inline-{$number}";
+        $path = $source !== null
+            ? $this->save($this->fetchSource($source), $basename)
+            : $this->draw($this->inlinePrompt($post, $description), $basename, $post->id);
+
+        $caption = str_replace([']', '['], '', $description);
+        $post->update(['content' => str_replace($tag, "![{$caption}]({$path})", $post->content)]);
+
+        if ($previous !== $path) {
+            File::delete(public_path($previous));
+        }
+
+        return $path;
+    }
+
     public static function pendingInline(Post $post): int
     {
         return preg_match_all(self::INLINE_MARKER, $post->content);
@@ -83,6 +112,35 @@ class PostImageGenerator
         preg_match_all('#\]\(('.preg_quote(self::DIRECTORY, '#').'/[^)\s]+)\)#', $content, $matches);
 
         return $matches[1];
+    }
+
+    /**
+     * Our in-text images in body order, each as [full "![caption](path)" tag, caption, path].
+     *
+     * @return list<array{0: string, 1: string, 2: string}>
+     */
+    public static function inlineImages(string $content): array
+    {
+        preg_match_all('#!\[([^\]]*)\]\(('.preg_quote(self::DIRECTORY, '#').'/[^)\s]+)\)#', $content, $matches, PREG_SET_ORDER);
+
+        return array_map(fn (array $match) => [$match[0], $match[1], $match[2]], $matches);
+    }
+
+    /**
+     * Turns the absolute image URLs PostResource hands out back into stored relative paths, so a
+     * body read from the API and sent back unchanged keeps (and does not delete) its images.
+     */
+    public static function relativeContent(string $content): string
+    {
+        return str_replace('('.asset(self::DIRECTORY).'/', '('.self::DIRECTORY.'/', $content);
+    }
+
+    /** Deletes the files of in-text images that were in $before but are no longer referenced by $content. */
+    public static function pruneInline(array $before, string $content): void
+    {
+        foreach (array_diff($before, self::inlinePaths($content)) as $path) {
+            File::delete(public_path($path));
+        }
     }
 
     /** Calls the image model and saves the result under public/media/posts; returns the relative path. */

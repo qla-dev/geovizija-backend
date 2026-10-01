@@ -66,18 +66,21 @@ class PostController extends Controller
         $post->update($this->validated($request, $post));
 
         // In-text images the new body no longer references are deleted.
-        foreach (array_diff($oldImages, PostImageGenerator::inlinePaths((string) $post->content)) as $path) {
-            File::delete(public_path($path));
-        }
+        PostImageGenerator::pruneInline($oldImages, (string) $post->content);
 
         return new PostResource($post->load('category'));
     }
 
-    /** Generates a new cover image through OpenRouter and stores it on the post. */
-    public function generateImage(Post $post, PostImageGenerator $generator)
+    /**
+     * Replaces the cover image: the optional `image` (data URL or https link) when sent,
+     * otherwise a new drawing through OpenRouter. On failure the old cover stays.
+     */
+    public function generateImage(Request $request, Post $post, PostImageGenerator $generator)
     {
+        $data = $request->validate(['image' => ['nullable', 'string']]);
+
         try {
-            $generator->generate($post);
+            $generator->generate($post, $data['image'] ?? null);
         } catch (RuntimeException $exception) {
             return response()->json(['message' => $exception->getMessage()], 502);
         }
@@ -86,13 +89,24 @@ class PostController extends Controller
     }
 
     /**
-     * Draws the next pending in-text image ("[[SLIKA: ...]]" marker). Call repeatedly until
-     * `pending` is 0; one image per request keeps each call short.
+     * Without `number`: draws the next pending in-text image ("[[SLIKA: ...]]" marker); call
+     * repeatedly until `pending` is 0, one image per request keeps each call short.
+     * With `number`: replaces that existing in-text image (1-based) instead, from the optional
+     * `description` (default: the old caption). Either way an optional `image` (data URL or
+     * https link) is used instead of drawing through OpenRouter.
      */
-    public function generateInlineImage(Post $post, PostImageGenerator $generator)
+    public function generateInlineImage(Request $request, Post $post, PostImageGenerator $generator)
     {
+        $data = $request->validate([
+            'image' => ['nullable', 'string'],
+            'number' => ['nullable', 'integer', 'min:1'],
+            'description' => ['nullable', 'string', 'max:500'],
+        ]);
+
         try {
-            $path = $generator->generateNextInline($post);
+            $path = isset($data['number'])
+                ? $generator->replaceInline($post, $data['number'], $data['image'] ?? null, $data['description'] ?? null)
+                : $generator->generateNextInline($post, $data['image'] ?? null);
         } catch (RuntimeException $exception) {
             return response()->json(['message' => $exception->getMessage(), 'pending' => PostImageGenerator::pendingInline($post)], 502);
         }
@@ -140,6 +154,10 @@ class PostController extends Controller
             'featured' => ['sometimes', 'boolean'],
             'published_at' => ['nullable', 'date'],
         ]);
+
+        if (isset($data['content'])) {
+            $data['content'] = PostImageGenerator::relativeContent($data['content']);
+        }
 
         if (isset($data['category'])) {
             $data['category_id'] = Category::where('slug', $data['category'])->value('id');

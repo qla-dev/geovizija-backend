@@ -23,6 +23,7 @@ use Throwable;
  * The JSON itself carries the publish secret; without the right one nothing is stored.
  *
  *   {"secret": "...", "type": "article", "category": "priroda", "title": "...", "excerpt": "...", "content": "...", "publishedAt"?: "ISO 8601"}
+ *   {"secret": "...", "type": "article", "id": 12, ...only the fields to change...}  (edits an existing article)
  *   {"secret": "...", "type": "quiz", "date"?: "Y-m-d", "title": "...", "intro": "...", "questions": [...]}
  */
 class PublishController extends Controller
@@ -35,7 +36,7 @@ class PublishController extends Controller
         }
 
         return match ($request->input('type')) {
-            'article' => $this->article($request, $images),
+            'article' => $request->has('id') ? $this->updateArticle($request, $images) : $this->article($request, $images),
             'quiz' => $this->quiz($request, $quizzes),
             default => response()->json(['message' => 'Polje "type" mora biti "article" ili "quiz".'], 422),
         };
@@ -124,6 +125,126 @@ class PublishController extends Controller
             'images' => $sources,
             'data' => new PostResource($post->refresh()->load('category')),
         ], 201);
+    }
+
+    /**
+     * Edits an existing article; only the fields that are sent change (slug and URL stay).
+     *   cover: data URL / https link, or true to redraw through OpenRouter
+     *   content: new body; its new "[[SLIKA: ...]]" markers are drawn, filled from inlineImages in order
+     *   replaceInline: [{"number": 1, "image"?: "...", "description"?: "..."}] replaces existing in-text images
+     * A supplied image that is rejected does not fall back to OpenRouter: the old one stays and a warning says so.
+     */
+    private function updateArticle(Request $request, PostImageGenerator $images)
+    {
+        $data = $request->validate([
+            'id' => ['required', 'integer', Rule::exists('posts', 'id')],
+            'category' => ['sometimes', 'string', Rule::exists('categories', 'slug')],
+            'title' => ['sometimes', 'string', 'max:255'],
+            'excerpt' => ['sometimes', 'string', 'max:500'],
+            'content' => ['sometimes', 'string'],
+            'author' => ['sometimes', 'string', 'max:255'],
+            'publishedAt' => ['sometimes', 'date'],
+            'published_at' => ['sometimes', 'date'],
+            'cover' => ['sometimes', 'nullable'],
+            'inlineImages' => ['sometimes', 'nullable', 'array', 'max:2'],
+            'inlineImages.*' => ['nullable', 'string'],
+            'replaceInline' => ['sometimes', 'array', 'max:2'],
+            'replaceInline.*.number' => ['required', 'integer', 'min:1'],
+            'replaceInline.*.image' => ['nullable', 'string'],
+            'replaceInline.*.description' => ['nullable', 'string', 'max:500'],
+        ]);
+        $post = Post::findOrFail($data['id']);
+
+        $fields = array_intersect_key($data, array_flip(['title', 'excerpt', 'author']));
+        if (isset($data['category'])) {
+            $fields['category_id'] = Category::where('slug', $data['category'])->value('id');
+        }
+        if (isset($data['publishedAt']) || isset($data['published_at'])) {
+            $fields['published_at'] = Carbon::parse($data['publishedAt'] ?? $data['published_at']);
+        }
+        if (isset($data['content'])) {
+            $content = PostImageGenerator::relativeContent(trim(str_replace("\r\n", "\n", $data['content'])));
+            $words = PostContentGenerator::words(PostContentGenerator::textOnly($content));
+            if ($words < 150) {
+                return response()->json(['message' => "Tekst je prekratak ({$words} riječi)."], 422);
+            }
+            $fields['content'] = $content;
+            $fields['read_time'] = max(1, (int) ceil($words / 200));
+        }
+
+        $cover = $data['cover'] ?? null;
+        if ($cover !== null && $cover !== true && ! is_string($cover)) {
+            return response()->json(['message' => 'Polje "cover" mora biti slika (data:image/... ili https link) ili true.'], 422);
+        }
+
+        $changed = array_keys($fields);
+        if ($fields) {
+            $before = PostImageGenerator::inlinePaths((string) $post->content);
+            $post->update($fields);
+            PostImageGenerator::pruneInline($before, (string) $post->content);
+        }
+
+        ignore_user_abort(true);
+        set_time_limit(300);
+
+        $warnings = [];
+        $sources = ['agent' => 0, 'api' => 0];
+        $attempt = function (callable $store, ?string $supplied, string $label) use (&$warnings, &$sources, &$changed) {
+            try {
+                $store($supplied);
+                $sources[$supplied !== null ? 'agent' : 'api']++;
+                $changed[] = $label;
+            } catch (Throwable $exception) {
+                $warnings[] = "{$label} nije promijenjena: ".$exception->getMessage();
+            }
+        };
+
+        if ($cover !== null) {
+            $attempt(fn (?string $src) => $images->generate($post, $src), is_string($cover) ? $cover : null, 'Naslovna slika');
+        }
+
+        foreach ($data['replaceInline'] ?? [] as $item) {
+            $attempt(
+                fn (?string $src) => $images->replaceInline($post->refresh(), $item['number'], $src, $item['description'] ?? null),
+                $item['image'] ?? null,
+                "Slika u tekstu {$item['number']}",
+            );
+        }
+
+        // New markers in the body: supplied images in marker order, otherwise drawn through OpenRouter.
+        $inline = array_values($data['inlineImages'] ?? []);
+        for ($i = 0; $i < 2 && PostImageGenerator::pendingInline($post->refresh()) > 0; $i++) {
+            $supplied = $inline[$i] ?? null;
+            if ($supplied !== null) {
+                try {
+                    $images->generateNextInline($post, $supplied);
+                    $sources['agent']++;
+
+                    continue;
+                } catch (Throwable $exception) {
+                    $warnings[] = 'Nova slika u tekstu '.($i + 1).": poslana slika odbijena ({$exception->getMessage()}), generišem preko API-ja.";
+                }
+            }
+            try {
+                $images->generateNextInline($post);
+                $sources['api']++;
+            } catch (Throwable $exception) {
+                $warnings[] = 'Nova slika u tekstu '.($i + 1).' nije generisana: '.$exception->getMessage();
+            }
+        }
+
+        if (! $changed && ! $sources['agent'] && ! $sources['api']) {
+            return response()->json(['message' => 'Ništa nije promijenjeno.', 'warnings' => $warnings], $warnings ? 422 : 200);
+        }
+
+        return response()->json([
+            'message' => 'Članak je ažuriran.',
+            'changed' => $changed,
+            'url' => "https://geovizija.com/#/article/{$post->id}",
+            'warnings' => $warnings,
+            'images' => $sources,
+            'data' => new PostResource($post->refresh()->load('category')),
+        ]);
     }
 
     private function quiz(Request $request, QuizGenerator $quizzes)

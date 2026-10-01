@@ -63,6 +63,13 @@ Završni pasus koji povezuje temu s čitaocem ili budućnošću.
 - Only well-known, verifiable facts. No invented quotes, experts, institutions or statistics.
 - Categories: use a `slug` from the context (`priroda`, `putovanja`, `drustvo`, `tehnologija`, `kultura`, `stanovnistvo`, `zanimljivosti`, `skolstvo`).
 
-## Rewriting an existing article
+## Editing an existing article
 
-Only when the task names the article. `PATCH /posts/{id}` with new `excerpt` and `content` (same format, with two new `[[SLIKA: …]]` markers), then run step 5. In-text images the new body no longer references are deleted by the server; the cover is kept unless you also call step 4.
+Only when the task names the article. Read it first with `GET /posts/{id}`; change only what the task asks for. Without the admin token use `POST /publish` with `"id"` (see [README.md](README.md#editing-an-existing-article)); with it:
+
+- **Text** (title, excerpt, body): `PATCH /posts/{id}` with just those fields. To keep the in-text images, keep their `![…](…)` lines; the `content` from `GET /posts/{id}` can be edited and sent back as is. Images whose lines you remove are deleted by the server.
+- **Rewrite with new images**: `PATCH` a body with two new `[[SLIKA: …]]` markers instead of the old image lines, then run step 5.
+- **Cover**: `POST /posts/{id}/generate-image` redraws it; send `{"image": "data:…" or "https://…"}` to use your own picture.
+- **One in-text image**: `POST /posts/{id}/generate-inline-image` with `{"number": 2, "description": "nova scena"}` (1 = first image in the body); add `"image"` to use your own picture instead of drawing.
+
+A failed image call leaves the old image in place. Report what changed and the article URL.
