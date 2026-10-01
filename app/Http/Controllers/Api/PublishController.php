@@ -53,6 +53,11 @@ class PublishController extends Controller
             // Until then the article is hidden from the site and from /posts (Post::published()).
             'publishedAt' => ['nullable', 'date'],
             'published_at' => ['nullable', 'date'],
+            // Optional images supplied by the agent ("data:image/...;base64,..." or https link).
+            // Any that are missing or fail are drawn through OpenRouter instead.
+            'cover' => ['nullable', 'string'],
+            'inlineImages' => ['nullable', 'array', 'max:2'],
+            'inlineImages.*' => ['nullable', 'string'],
         ]);
         $publishAt = Carbon::parse($data['publishedAt'] ?? $data['published_at'] ?? 'now');
 
@@ -79,19 +84,33 @@ class PublishController extends Controller
         set_time_limit(300);
 
         $warnings = [];
-        try {
-            $images->generate($post);
-        } catch (Throwable $exception) {
-            $warnings[] = 'Naslovna slika nije generisana: '.$exception->getMessage();
-        }
+        $sources = ['agent' => 0, 'api' => 0];
 
-        for ($i = 0; $i < 3 && PostImageGenerator::pendingInline($post->refresh()) > 0; $i++) {
-            try {
-                $images->generateNextInline($post);
-            } catch (Throwable $exception) {
-                $warnings[] = 'Slika u tekstu nije generisana: '.$exception->getMessage();
-                break;
+        // Supplied image first; on failure (or when none was sent) fall back to OpenRouter.
+        $place = function (callable $store, ?string $supplied, string $label) use (&$warnings, &$sources) {
+            if ($supplied) {
+                try {
+                    $store($supplied);
+                    $sources['agent']++;
+
+                    return;
+                } catch (Throwable $exception) {
+                    $warnings[] = "{$label}: poslana slika odbijena ({$exception->getMessage()}), generišem preko API-ja.";
+                }
             }
+            try {
+                $store(null);
+                $sources['api']++;
+            } catch (Throwable $exception) {
+                $warnings[] = "{$label} nije generisana: ".$exception->getMessage();
+            }
+        };
+
+        $place(fn (?string $src) => $images->generate($post, $src), $data['cover'] ?? null, 'Naslovna slika');
+
+        $inline = array_values($data['inlineImages'] ?? []);
+        for ($i = 0; $i < 2 && PostImageGenerator::pendingInline($post->refresh()) > 0; $i++) {
+            $place(fn (?string $src) => $images->generateNextInline($post, $src), $inline[$i] ?? null, 'Slika u tekstu '.($i + 1));
         }
 
         return response()->json([
@@ -102,6 +121,7 @@ class PublishController extends Controller
             'scheduled' => $publishAt->isFuture(),
             'url' => "https://geovizija.com/#/article/{$post->id}",
             'warnings' => $warnings,
+            'images' => $sources,
             'data' => new PostResource($post->refresh()->load('category')),
         ], 201);
     }

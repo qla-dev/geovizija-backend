@@ -24,10 +24,18 @@ class PostImageGenerator
     /** Placeholder the content generator leaves in the body: a line "[[SLIKA: description]]". */
     public const INLINE_MARKER = '/^\[\[SLIKA:\s*(.+?)\s*\]\]$/mu';
 
-    /** Generates the cover image and stores it as the post's image_url. */
-    public function generate(Post $post): string
+    /** Largest image accepted from an outside source (data URL or https link). */
+    public const MAX_SOURCE_BYTES = 8 * 1024 * 1024;
+
+    /**
+     * Stores the cover image as the post's image_url: the supplied $source (data URL or https
+     * link) when given, otherwise one drawn through OpenRouter.
+     */
+    public function generate(Post $post, ?string $source = null): string
     {
-        $path = $this->draw($this->prompt($post), $post->slug, $post->id);
+        $path = $source !== null
+            ? $this->save($this->fetchSource($source), $post->slug)
+            : $this->draw($this->prompt($post), $post->slug, $post->id);
 
         $previous = $post->image_url;
         $post->update(['image_url' => $path]);
@@ -45,7 +53,7 @@ class PostImageGenerator
      * with "![description](media/posts/...)". Returns null when no marker is left.
      * One image per call keeps each request well inside hosting time limits.
      */
-    public function generateNextInline(Post $post): ?string
+    public function generateNextInline(Post $post, ?string $source = null): ?string
     {
         if (! preg_match(self::INLINE_MARKER, $post->content, $match)) {
             return null;
@@ -53,7 +61,10 @@ class PostImageGenerator
 
         $description = $match[1];
         $number = preg_match_all('#!\[[^\]]*\]\('.preg_quote(self::DIRECTORY, '#').'/#', $post->content) + 1;
-        $path = $this->draw($this->inlinePrompt($post, $description), "{$post->slug}-inline-{$number}", $post->id);
+        $basename = "{$post->slug}-inline-{$number}";
+        $path = $source !== null
+            ? $this->save($this->fetchSource($source), $basename)
+            : $this->draw($this->inlinePrompt($post, $description), $basename, $post->id);
 
         $caption = str_replace([']', '['], '', $description);
         $post->update(['content' => preg_replace(self::INLINE_MARKER, "![{$caption}]({$path})", $post->content, 1)]);
@@ -112,6 +123,52 @@ class PostImageGenerator
             throw new RuntimeException($error);
         }
 
+        return $this->save($image, $basename);
+    }
+
+    /**
+     * Turns an outside image (a "data:image/...;base64," URL or an https link) into image bytes.
+     *
+     * @return array{bytes: string, mime: string, extension: string}
+     */
+    private function fetchSource(string $source): array
+    {
+        $source = trim($source);
+
+        if (str_starts_with($source, 'data:')) {
+            $image = self::decode($source);
+        } elseif (preg_match('#^https://#i', $source)) {
+            try {
+                $response = Http::timeout(30)->get($source);
+            } catch (ConnectionException $exception) {
+                throw new RuntimeException('Slika se ne može preuzeti: '.$exception->getMessage());
+            }
+            if (! $response->successful()) {
+                throw new RuntimeException("Slika se ne može preuzeti (HTTP {$response->status()}).");
+            }
+            $bytes = $response->body();
+            $info = @getimagesizefromstring($bytes);
+            $type = $info ? image_type_to_extension($info[2], false) : null;
+            $image = in_array($type, ['png', 'jpeg', 'webp', 'gif'], true)
+                ? ['bytes' => $bytes, 'mime' => $info['mime'], 'extension' => $type === 'jpeg' ? 'jpg' : $type]
+                : null;
+        } else {
+            throw new RuntimeException('Slika mora biti data:image/... URL ili https link.');
+        }
+
+        if (! $image || ! @getimagesizefromstring($image['bytes'])) {
+            throw new RuntimeException('Poslana slika nije ispravna (PNG, JPEG, WebP ili GIF).');
+        }
+        if (strlen($image['bytes']) > self::MAX_SOURCE_BYTES) {
+            throw new RuntimeException('Poslana slika je veća od 8 MB.');
+        }
+
+        return $image;
+    }
+
+    /** Saves image bytes (as JPEG when possible) under public/media/posts; returns the relative path. */
+    private function save(array $image, string $basename): string
+    {
         $image = self::toJpeg($image);
         $path = self::DIRECTORY.'/'.$basename.'-'.now()->format('YmdHis').'.'.$image['extension'];
         File::ensureDirectoryExists(public_path(self::DIRECTORY));

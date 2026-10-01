@@ -19,6 +19,8 @@ A ready-to-paste prompt for the scheduled run is in [routine-prompt.md](routine-
 {"secret": "…", "type": "quiz", "date": "2026-10-02", "title": "…", "intro": "…", "questions": [{"topic": "…", "question": "…", "options": ["…","…","…","…"], "correct": 0, "explanation": "…"}]}
 ```
 
+Images: optionally send your own as `"cover"` and `"inlineImages"` (up to 2, in marker order), each a `data:image/png|jpeg|webp;base64,…` URL or an `https://` link, max 8 MB. Any image that is missing or rejected is drawn through OpenRouter instead (the response reports `"images": {"agent": n, "api": n}` and lists fallbacks in `warnings`). Keep request bodies small: prefer links or compressed JPEGs over large base64.
+
 An article is published immediately and its cover and in-text images are drawn in the same request (~1 minute). Add `"publishedAt": "2026-10-01T14:20:00+02:00"` (ISO 8601) to schedule it: until then it is hidden from the site and from `/posts` (the response says `"scheduled": true`). A quiz for a date that already has one is refused (409). Never write the secret into this repository.
 
 ## Environment
