@@ -7,7 +7,7 @@ use Tests\TestCase;
 
 class ImageOptimizeTest extends TestCase
 {
-    public function test_saved_image_is_a_watermarked_jpeg_under_100_kb_and_1600_wide(): void
+    public function test_saved_image_is_a_watermarked_jpeg_under_250_kb_and_1600_wide(): void
     {
         $im = imagecreatetruecolor(2400, 1350);
         for ($x = 0; $x < 2400; $x += 8) {
@@ -21,7 +21,7 @@ class ImageOptimizeTest extends TestCase
         [$width, $height] = getimagesizefromstring($jpeg['bytes']);
 
         $this->assertSame('jpg', $jpeg['extension']);
-        $this->assertLessThanOrEqual(100_000, strlen($jpeg['bytes']));
+        $this->assertLessThanOrEqual(250_000, strlen($jpeg['bytes']));
         $this->assertSame([1600, 900], [$width, $height]);
 
         // The top-right corner now carries the semi-transparent white GEOVIZIJA.
@@ -63,6 +63,32 @@ class ImageOptimizeTest extends TestCase
         $this->postJson('/api/images/reprocess')->assertJsonPath('processed', []);
 
         \Illuminate\Support\Facades\File::delete([public_path($post->image_url), public_path($inline)]);
+    }
+
+    public function test_new_cover_keeps_its_original_and_gets_an_instagram_portrait(): void
+    {
+        $this->artisan('migrate');
+        $category = \App\Models\Category::create(['slug' => 'priroda', 'name' => 'Priroda', 'color' => 'x']);
+        $post = \App\Models\Post::create([
+            'category_id' => $category->id, 'slug' => 'orig', 'title' => 'T', 'excerpt' => 'E', 'author' => 'A',
+            'read_time' => 1, 'content' => 'Tekst',
+        ]);
+        ob_start();
+        imagejpeg(imagecreatetruecolor(2400, 1600), null, 95);
+        $source = 'data:image/jpeg;base64,'.base64_encode((string) ob_get_clean());
+
+        $path = app(PostImageGenerator::class)->generate($post, $source);
+
+        $this->assertFileExists(PostImageGenerator::originalPath($path));
+        $this->assertSame([2400, 1600], array_slice(getimagesize(PostImageGenerator::originalPath($path)), 0, 2));
+        $this->assertSame([1080, 1350], array_slice(getimagesize(public_path(PostImageGenerator::portraitPath($path))), 0, 2));
+
+        // A new cover removes the old one with its portrait and original.
+        $next = app(PostImageGenerator::class)->generate($post, $source);
+        $this->assertFileDoesNotExist(PostImageGenerator::originalPath($path));
+        $this->assertFileDoesNotExist(public_path(PostImageGenerator::portraitPath($path)));
+
+        \Illuminate\Support\Facades\File::delete([public_path($next), public_path(PostImageGenerator::portraitPath($next)), PostImageGenerator::originalPath($next)]);
     }
 
     /** @return array<string, array{int, int, int, int}> */

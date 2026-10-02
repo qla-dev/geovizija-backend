@@ -62,7 +62,7 @@ class InstagramPublisher
 
         try {
             $container = $this->container([
-                'image_url' => (new PostResource($post))->resolve()['imageUrl'],
+                'image_url' => $this->feedImage($post),
                 'caption' => $this->caption($post),
             ]);
             if (isset($container['error'])) {
@@ -197,6 +197,19 @@ class InstagramPublisher
             'creation_id' => $id,
             'access_token' => config('services.meta.page_token'),
         ]);
+    }
+
+    /** The cover's 4:5 version (made now for covers saved before it existed), else the cover itself. */
+    private function feedImage(Post $post): string
+    {
+        if (PostImageGenerator::isGenerated($post->image_url)) {
+            $portrait = PostImageGenerator::portraitPath($post->image_url);
+            if (File::exists(public_path($portrait)) || PostImageGenerator::makePortrait($post->image_url)) {
+                return asset($portrait);
+            }
+        }
+
+        return (new PostResource($post))->resolve()['imageUrl'];
     }
 
     /** Title, excerpt, where to read on (captions have no links) and a few hashtags. */

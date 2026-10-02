@@ -30,12 +30,15 @@ class PostImageGenerator
     /** Saved images (see toJpeg): width limit, size limit, lowest JPEG quality before shrinking. */
     private const MAX_WIDTH = 1600;
 
-    private const MAX_BYTES = 100 * 1000;
+    private const MAX_BYTES = 250 * 1000;
 
-    private const QUALITY_FLOOR = 42;
+    private const QUALITY_FLOOR = 60;
 
     /** Ends the file name of every image saved through toJpeg(), e.g. media/posts/una-20261002180000-wm.jpg. */
     private const PROCESSED_MARK = '-w3';
+
+    /** Originals of saved images, under storage/ (see originalPath). */
+    private const ORIGINALS = 'app/originals';
 
     /**
      * Stores the cover image as the post's image_url: the supplied $source (data URL or https
@@ -47,12 +50,14 @@ class PostImageGenerator
             ? $this->save($this->fetchSource($source), $post->slug)
             : $this->draw($this->prompt($post), $post->slug, $post->id);
 
+        self::makePortrait($path);
+
         $previous = $post->image_url;
         $post->update(['image_url' => $path]);
 
         // Remove the image this one replaces, but only if it was one of ours.
         if ($previous && str_starts_with($previous, self::DIRECTORY.'/') && $previous !== $path) {
-            File::delete(public_path($previous));
+            self::deleteCover($previous);
         }
 
         return $path;
@@ -327,7 +332,60 @@ class PostImageGenerator
         File::ensureDirectoryExists(public_path(self::DIRECTORY));
         File::put(public_path($path), $image['bytes']);
 
+        // The untouched original, so other formats (Instagram) and later changes start from full
+        // quality instead of recompressing the published JPEG.
+        if ($mark !== '') {
+            File::ensureDirectoryExists(storage_path(self::ORIGINALS));
+            File::put(self::originalPath($path), $original);
+        }
+
         return $path;
+    }
+
+    /** Where the original of a saved image is kept (storage/app/originals, not public). */
+    public static function originalPath(string $path): string
+    {
+        return storage_path(self::ORIGINALS.'/'.pathinfo($path, PATHINFO_FILENAME).'.orig');
+    }
+
+    /** The original of a saved image when kept, else the saved image itself (older articles). */
+    public static function sourceImage(string $path): \GdImage|false
+    {
+        $file = File::exists(self::originalPath($path)) ? self::originalPath($path) : public_path($path);
+
+        return File::exists($file) ? @imagecreatefromstring((string) File::get($file)) : false;
+    }
+
+    /** media/posts/x-...-w3.jpg → media/posts/x-...-w3-ig.jpg: the Instagram feed version of a cover. */
+    public static function portraitPath(string $path): string
+    {
+        return preg_replace('/\.\w+$/', '-ig.jpg', $path);
+    }
+
+    /**
+     * The Instagram feed version of a cover: 4:5 (1080 x 1350 when the original is large enough),
+     * from the original, with the logo in the same places as the landscape version.
+     */
+    public static function makePortrait(string $path): ?string
+    {
+        $source = self::sourceImage($path);
+        if ($source === false) {
+            return null;
+        }
+        $width = min(1080, imagesx($source), (int) round(imagesy($source) * 4 / 5));
+        $canvas = self::watermarked($source, $width, 4 / 5);
+        imageinterlace($canvas, true);
+        imagejpeg($canvas, public_path(self::portraitPath($path)), 90);
+        imagedestroy($canvas);
+        imagedestroy($source);
+
+        return self::portraitPath($path);
+    }
+
+    /** Deletes a saved cover with its Instagram version and original. */
+    private static function deleteCover(string $path): void
+    {
+        File::delete([public_path($path), public_path(self::portraitPath($path)), self::originalPath($path)]);
     }
 
     private function inlinePrompt(Post $post, string $description): string
@@ -388,16 +446,16 @@ class PostImageGenerator
     }
 
     /**
-     * A $width-wide 16:9 copy of $source (centre crop, so Facebook shows the large link preview
-     * whatever shape the agent or model sent) with the logo like news photo agencies: green frame
+     * A $width-wide copy of $source at $ratio (centre crop; 16:9 so Facebook shows the large link
+     * preview whatever shape the agent or model sent, 4:5 for the Instagram feed) with the logo like news photo agencies: green frame
      * top-left, GEOVIZIJA top-right, semi-transparent.
      */
-    private static function watermarked(\GdImage $source, int $width): \GdImage
+    private static function watermarked(\GdImage $source, int $width, float $ratio = 16 / 9): \GdImage
     {
         [$sourceWidth, $sourceHeight] = [imagesx($source), imagesy($source)];
-        $cropWidth = min($sourceWidth, (int) round($sourceHeight * 16 / 9));
-        $cropHeight = min($sourceHeight, (int) round($sourceWidth * 9 / 16));
-        $height = (int) round($width * 9 / 16);
+        $cropWidth = min($sourceWidth, (int) round($sourceHeight * $ratio));
+        $cropHeight = min($sourceHeight, (int) round($sourceWidth / $ratio));
+        $height = (int) round($width / $ratio);
         $canvas = imagecreatetruecolor($width, $height);
         imagecopyresampled($canvas, $source, 0, 0, intdiv($sourceWidth - $cropWidth, 2), intdiv($sourceHeight - $cropHeight, 2), $width, $height, $cropWidth, $cropHeight);
 
