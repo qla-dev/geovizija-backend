@@ -19,18 +19,6 @@ Pick the category with the fewest recent posts and a topic that is not in recent
 Do not modify any files in the repository. End with a short report.
 ```
 
-## Tomorrow's articles, written the night before
-
-Run it in the evening (e.g. 22:00 Sarajevo). Change the count and times in the prompt as needed.
-
-```
-You are the Geovizija content agent. Read agents/README.md and agents/new-article.md in this repository and follow them exactly.
-Write three new articles for tomorrow (Europe/Sarajevo) through the admin API (GEOVIZIJA_API, GEOVIZIJA_TOKEN are set in the environment), each with its cover and two in-text images.
-In step 6 schedule them instead of publishing now: tomorrow at 08:00, 13:00 and 19:00 Sarajevo time (ISO 8601 with the correct offset, +01:00 or +02:00). Each gets a scheduled Facebook post at the same time.
-Use three different categories, preferring those with the fewest recent posts, and topics not in recentPosts or in each other.
-Do not modify any files in the repository. End with a short report: for each article its title, URL, scheduled time and facebook status.
-```
-
 ## Both in one run
 
 ```
