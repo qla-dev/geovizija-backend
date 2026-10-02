@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\Post;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -16,6 +15,8 @@ use Throwable;
  * one becomes a scheduled Page post (visible in the Business Suite Planner),
  * so no cron or queue is needed. Facebook only schedules 10 minutes to 30 days
  * ahead: closer times are moved to +10 minutes, later ones are not shared.
+ * Facebook reads the link preview when the post is created, so og.php reads a
+ * scheduled article from /posts/{slug}/preview (PostController::preview).
  *
  * Never throws: the result is returned and errors are stored in posts.meta_error.
  */
@@ -42,7 +43,12 @@ class MetaPublisher
             return ['status' => 'skipped', 'message' => 'Članak je već podijeljen na Facebooku.', 'postId' => $post->meta_post_id];
         }
 
-        $publishAt = $post->published_at ?? Carbon::now();
+        // A draft has no page to link to yet; publishing it (PostController::update) shares it.
+        if ($post->published_at === null) {
+            return ['status' => 'skipped', 'message' => 'Nacrt se dijeli tek kad dobije datum objave.'];
+        }
+
+        $publishAt = $post->published_at;
         if ($publishAt->greaterThan(now()->addDays(self::MAX_SCHEDULE_DAYS))) {
             return $this->fail($post, 'Facebook zakazuje najviše 30 dana unaprijed; podijelite članak kasnije.');
         }

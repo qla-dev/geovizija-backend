@@ -135,6 +135,40 @@ class MetaShareTest extends TestCase
         $this->get('/share/ne-postoji')->assertNotFound();
     }
 
+    public function test_draft_is_shared_when_it_gets_a_publication_date(): void
+    {
+        $this->fakeFacebook();
+        $this->withToken('admin-token')->postJson('/api/posts', [
+            'category' => 'priroda', 'title' => 'Nacrt', 'excerpt' => 'Uvod', 'content' => 'Tekst', 'published_at' => null,
+        ])->assertCreated()->assertJsonPath('facebook.status', 'skipped');
+        Http::assertNothingSent();
+        $id = Post::value('id');
+
+        $this->withToken('admin-token')->patchJson("/api/posts/{$id}", ['title' => 'Nacrt 2'])->assertJsonMissingPath('facebook');
+        Http::assertNothingSent();
+
+        $at = now()->addHours(10)->startOfMinute();
+        $this->withToken('admin-token')->patchJson("/api/posts/{$id}", ['published_at' => $at->toIso8601String()])
+            ->assertOk()->assertJsonPath('facebook.status', 'scheduled');
+        Http::assertSent(fn (Request $r) => (int) $r['scheduled_publish_time'] === $at->getTimestamp());
+
+        $this->withToken('admin-token')->patchJson("/api/posts/{$id}", ['published_at' => now()->toIso8601String()])->assertJsonMissingPath('facebook');
+        Http::assertSentCount(1);
+    }
+
+    public function test_preview_serves_scheduled_articles_but_not_drafts(): void
+    {
+        $this->article(['published_at' => now()->addDay()]);
+        $this->article(['slug' => 'nacrt', 'published_at' => null]);
+
+        $this->getJson('/api/posts/berat-grad')->assertNotFound();
+        $this->getJson('/api/posts/berat-grad/preview')->assertOk()
+            ->assertJsonPath('data.title', 'Berat, grad hiljadu prozora')
+            ->assertJsonPath('data.imageUrl', asset('media/posts/berat.jpg'))
+            ->assertJsonMissingPath('data.content');
+        $this->getJson('/api/posts/nacrt/preview')->assertNotFound();
+    }
+
     public function test_admin_create_and_share_endpoint(): void
     {
         $this->fakeFacebook();

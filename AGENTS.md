@@ -44,8 +44,8 @@ Generated text can contain inaccurate specifics; the prompt forbids invented quo
 
 `App\Services\MetaPublisher` shares each new article on the Geovizija Facebook Page through the Graph API (`/{page}/feed`). It is off until `META_PAGE_ID` and `META_PAGE_TOKEN` (a long-lived Page access token with `pages_manage_posts` and `pages_read_engagement`) are set in the server `.env`, then `config:cache` (the backend redeploy does it).
 
-- Hooks: `/api/publish` (after the images) and admin `POST /api/posts`. Edits are not re-shared. `shareToMeta: false` in the publish JSON opts out.
-- Scheduled articles become scheduled Page posts (Business Suite Planner), so no cron or queue is needed. Facebook accepts 10 minutes to 30 days ahead.
+- Hooks: `/api/publish` (after the images), admin `POST /api/posts`, and admin `PATCH /api/posts/{id}` when it first gives a draft a `published_at`. Drafts are never shared; other edits are not re-shared. `shareToMeta: false` in the publish JSON opts out.
+- Scheduled articles become scheduled Page posts (Business Suite Planner), so no cron or queue is needed. Facebook accepts 10 minutes to 30 days ahead. Facebook reads the link preview when the scheduled post is created, so `og.php` reads `GET /api/posts/{slug}/preview` (title, excerpt, cover — also for scheduled articles; drafts 404, no body). Moving `published_at` later does not move the Facebook post.
 - Posts link to `SITE_URL/article/{slug}`. The frontend repo's `.htaccess` sends crawlers (facebookexternalhit, WhatsApp, Twitterbot, Googlebot…) asking for `/article/{slug}` or `/category/{slug}` to its `og.php`, which serves the app HTML with that page's Open Graph tags from this API. `/share/{slug}` (`ShareController`) only keeps links from before clean URLs working.
 - `posts.meta_post_id` prevents double posting; `posts.meta_error` keeps the last failure. Retry: `POST /api/posts/{id}/share-meta[?force=1]` (admin) or `php artisan posts:share-meta {ids...} [--force]` (writes to the database `.env` points at).
 - A failure is logged and returned as `facebook.status = failed`; it never blocks publishing.

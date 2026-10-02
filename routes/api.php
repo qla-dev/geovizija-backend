@@ -13,6 +13,7 @@ Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/categories/{category}', [CategoryController::class, 'show']);
 Route::get('/posts', [PostController::class, 'index']);
 Route::get('/posts/{post}', [PostController::class, 'show']);
+Route::get('/posts/{post}/preview', [PostController::class, 'preview']);
 Route::get('/posts/{post}/comments', [CommentController::class, 'index']);
 Route::get('/quizzes', [QuizController::class, 'index']);
 Route::get('/quizzes/today', [QuizController::class, 'today']);

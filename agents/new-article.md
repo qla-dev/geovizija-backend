@@ -19,11 +19,11 @@ Goal: a short magazine article with a cover image and two in-text images, publis
    }
    ```
 
-   The response `data.id` is the post id. `author` defaults to "Kulašin"; `read_time` is computed. The post is shared on the Facebook Page right away (see `facebook` in the response) — before steps 4–5 draw the images, so prefer `/publish` (README.md), which shares after the images; or call `POST /posts/{id}/share-meta?force=1` once the cover exists.
+   The response `data.id` is the post id. `author` defaults to "Kulašin"; `read_time` is computed. A draft is not shared on Facebook.
 4. `POST /posts/{id}/generate-image` — draws the cover (~20 s).
 5. `POST /posts/{id}/generate-inline-image` — draws the next `[[SLIKA: …]]` image. Call it again until the response shows `"pending": 0` (two calls for two markers).
-6. Publish: `PATCH /posts/{id}` with `{"published_at": "<now, ISO 8601>"}`.
-7. Report the title and `https://geovizija.com/article/{slug}`.
+6. Publish: `PATCH /posts/{id}` with `{"published_at": "<ISO 8601>"}` — now, or a later time to schedule it (e.g. `2026-10-03T08:00:00+02:00`; it stays hidden until then). This also shares it on the Facebook Page, posted at once or as a scheduled Page post at that time (see `facebook` in the response: `posted`, `scheduled` or `failed`; a failure does not undo the publish).
+7. Report the title, `https://geovizija.com/article/{slug}`, the publication time and the `facebook` status.
 
 If an image call fails, retry it once. If it still fails, leave the post as a draft and report it; do not publish an article without its cover.
 

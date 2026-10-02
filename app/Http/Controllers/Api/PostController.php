@@ -78,7 +78,27 @@ class PostController extends Controller
         // In-text images the new body no longer references are deleted.
         PostImageGenerator::pruneInline($oldImages, (string) $post->content);
 
-        return new PostResource($post->load('category'));
+        // A draft that gets its publication date (now or scheduled) is shared then; edits are not re-shared.
+        $facebook = $post->wasChanged('published_at') && $post->published_at && ! $post->meta_post_id
+            ? app(MetaPublisher::class)->share($post)
+            : null;
+
+        return (new PostResource($post->load('category')))->additional(array_filter(['facebook' => $facebook]));
+    }
+
+    /**
+     * Link-preview fields of a published or scheduled article, for the frontend's og.php:
+     * Facebook reads the preview when a scheduled Page post is created, before the article is public.
+     * Drafts are 404; the body is not included.
+     */
+    public function preview(Post $post)
+    {
+        abort_if($post->published_at === null, 404);
+        $article = (new PostResource($post->load('category')))->resolve();
+
+        return response()->json(['data' => array_intersect_key($article, array_flip(
+            ['id', 'slug', 'title', 'excerpt', 'category', 'imageUrl', 'author', 'publishedAt'],
+        ))]);
     }
 
     /**
