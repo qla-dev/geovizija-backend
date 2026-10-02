@@ -389,8 +389,8 @@ class PostImageGenerator
 
     /**
      * A $width-wide 16:9 copy of $source (centre crop, so Facebook shows the large link preview
-     * whatever shape the agent or model sent) with the logo top-left like news photo agencies:
-     * all white, semi-transparent, a fifth of the width.
+     * whatever shape the agent or model sent) with the logo like news photo agencies: green frame
+     * top-left, GEOVIZIJA top-right, semi-transparent.
      */
     private static function watermarked(\GdImage $source, int $width): \GdImage
     {
@@ -401,13 +401,19 @@ class PostImageGenerator
         $canvas = imagecreatetruecolor($width, $height);
         imagecopyresampled($canvas, $source, 0, 0, intdiv($sourceWidth - $cropWidth, 2), intdiv($sourceHeight - $cropHeight, 2), $width, $height, $cropWidth, $cropHeight);
 
-        $logo = @imagecreatefrompng(resource_path('images/watermark.png'));
-        if ($logo !== false) {
-            $logoWidth = (int) round(max(140, $width * 0.2));
-            $logoHeight = (int) round(imagesy($logo) * $logoWidth / imagesx($logo));
-            $margin = (int) round($width * 0.035);
-            imagealphablending($canvas, true);
-            imagecopyresampled($canvas, $logo, $margin, $margin, 0, 0, $logoWidth, $logoHeight, imagesx($logo), imagesy($logo));
+        // Frame top-left, text top-right, tops aligned; both drawn 4x (frame 128 px wide, text 463 px).
+        $scale = max(700, $width) * 0.2 / 643;
+        $margin = (int) round($width * 0.035);
+        imagealphablending($canvas, true);
+        foreach (['frame' => 'left', 'text' => 'right'] as $part => $side) {
+            $logo = @imagecreatefrompng(resource_path("images/watermark-{$part}.png"));
+            if ($logo === false) {
+                continue;
+            }
+            $logoWidth = (int) round(imagesx($logo) * $scale);
+            $logoHeight = (int) round(imagesy($logo) * $scale);
+            $x = $side === 'left' ? $margin : $width - $margin - $logoWidth;
+            imagecopyresampled($canvas, $logo, $x, $margin, 0, 0, $logoWidth, $logoHeight, imagesx($logo), imagesy($logo));
             imagedestroy($logo);
         }
 

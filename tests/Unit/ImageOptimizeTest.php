@@ -24,10 +24,10 @@ class ImageOptimizeTest extends TestCase
         $this->assertLessThanOrEqual(100_000, strlen($jpeg['bytes']));
         $this->assertSame([1600, 900], [$width, $height]);
 
-        // The top-left corner now carries the semi-transparent white logo.
+        // The top-right corner now carries the semi-transparent white GEOVIZIJA.
         $out = imagecreatefromstring($jpeg['bytes']);
         $bright = 0;
-        for ($x = 60; $x < 380; $x += 2) {
+        for ($x = 1300; $x < 1545; $x += 2) {
             for ($y = 60; $y < 150; $y += 2) {
                 $bright += (imagecolorat($out, $x, $y) & 0xFF) > 170 ? 1 : 0;
             }
