@@ -7,6 +7,7 @@ use App\Http\Resources\PostResource;
 use App\Models\Category;
 use App\Models\Post;
 use App\Models\Quiz;
+use App\Services\InstagramPublisher;
 use App\Services\PostContentGenerator;
 use App\Services\MetaPublisher;
 use App\Services\PostImageGenerator;
@@ -62,6 +63,8 @@ class PublishController extends Controller
             'inlineImages.*' => ['nullable', 'string'],
             // false keeps the article off the Facebook Page (default: shared once images are done).
             'shareToMeta' => ['nullable', 'boolean'],
+            // false keeps it off Instagram (default: posted there at publishedAt by instagram:publish-due).
+            'shareToInstagram' => ['nullable', 'boolean'],
         ]);
         $publishAt = Carbon::parse($data['publishedAt'] ?? $data['published_at'] ?? 'now');
 
@@ -121,6 +124,10 @@ class PublishController extends Controller
         $facebook = ($data['shareToMeta'] ?? true)
             ? app(MetaPublisher::class)->share($post->refresh())
             : ['status' => 'skipped', 'message' => 'shareToMeta: false'];
+        InstagramPublisher::queue($post, $data['shareToInstagram'] ?? true);
+        $instagram = $post->ig_status === 'pending'
+            ? ['status' => 'pending', 'message' => 'Ide na Instagram u vrijeme objave.']
+            : ['status' => 'skipped', 'message' => InstagramPublisher::configured() ? 'shareToInstagram: false' : 'Instagram nije povezan.'];
 
         return response()->json([
             'message' => $publishAt->isFuture()
@@ -132,6 +139,7 @@ class PublishController extends Controller
             'warnings' => $warnings,
             'images' => $sources,
             'facebook' => $facebook,
+            'instagram' => $instagram,
             'data' => new PostResource($post->refresh()->load('category')),
         ], 201);
     }

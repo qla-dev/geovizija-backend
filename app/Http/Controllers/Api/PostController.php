@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\PostResource;
 use App\Models\Category;
 use App\Models\Post;
+use App\Services\InstagramPublisher;
 use App\Services\MetaPublisher;
 use App\Services\PostContentGenerator;
 use App\Services\PostImageGenerator;
@@ -57,6 +58,9 @@ class PostController extends Controller
 
         $post = Post::create($data);
         $facebook = app(MetaPublisher::class)->share($post);
+        if ($post->published_at) {
+            InstagramPublisher::queue($post);
+        }
 
         return (new PostResource($post->load('category')))->additional(['facebook' => $facebook])->response()->setStatusCode(201);
     }
@@ -65,6 +69,20 @@ class PostController extends Controller
     public function shareToMeta(Request $request, Post $post, MetaPublisher $meta)
     {
         $result = $meta->share($post, $request->boolean('force'));
+
+        return response()->json($result, $result['status'] === 'failed' ? 502 : 200);
+    }
+
+    /**
+     * Posts an article on Instagram now (or with ?force=1 again); for older articles and retries.
+     * Not yet published articles are queued instead.
+     */
+    public function shareToInstagram(Request $request, Post $post, InstagramPublisher $instagram)
+    {
+        $result = $instagram->publish($post, $request->boolean('force'));
+        if ($result['status'] === 'pending') {
+            InstagramPublisher::queue($post);
+        }
 
         return response()->json($result, $result['status'] === 'failed' ? 502 : 200);
     }
@@ -82,6 +100,9 @@ class PostController extends Controller
         $facebook = $post->wasChanged('published_at') && $post->published_at && ! $post->meta_post_id
             ? app(MetaPublisher::class)->share($post)
             : null;
+        if ($post->wasChanged('published_at') && $post->published_at && $post->ig_status === null) {
+            InstagramPublisher::queue($post);
+        }
 
         return (new PostResource($post->load('category')))->additional(array_filter(['facebook' => $facebook]));
     }

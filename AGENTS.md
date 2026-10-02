@@ -59,3 +59,7 @@ Generated text can contain inaccurate specifics; the prompt forbids invented quo
 - Before any command that can write to a database, verify the effective connection (driver, host, port, database) read-only, accounting for `.env`, process environment and cached config.
 - Run automated tests only with `DB_CONNECTION=sqlite DB_DATABASE=:memory:` set for the test process.
 - Never print secrets from `.env` (DB password, `ADMIN_API_TOKEN`, `OPENROUTER_API_KEY`).
+
+# Instagram
+
+`App\Services\InstagramPublisher` posts an article's cover with a caption (title, excerpt, "link u opisu profila", hashtags) on the Instagram account `META_IG_USER_ID`, through the Page token (needs `instagram_basic`, `instagram_content_publish`). Instagram cannot schedule posts, so `/api/publish`, admin `POST /api/posts` and a draft's first `published_at` only queue it (`posts.ig_status = pending`; `shareToInstagram: false` → `skipped`; older articles stay null and are never posted automatically). `php artisan instagram:publish-due` (every minute from `schedule:run`, which needs the server cron `* * * * * cd <endpoints dir> && php artisan schedule:run`) posts at most 3 due articles per run. Retry or post an older article: admin `POST /api/posts/{id}/share-instagram[?force=1]`. Limit: 100 API posts per rolling 24 hours (`GET /{ig-user-id}/content_publishing_limit`). Columns `ig_*` come from migration `2026_10_02_000003`.

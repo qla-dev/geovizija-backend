@@ -56,6 +56,9 @@ return [
     'meta' => [
         'page_id' => env('META_PAGE_ID'),
         'page_token' => env('META_PAGE_TOKEN'),
+        // Instagram professional account linked to the Page (App\Services\InstagramPublisher); the
+        // Page token needs instagram_basic and instagram_content_publish.
+        'ig_user_id' => env('META_IG_USER_ID'),
         'graph_version' => env('META_GRAPH_VERSION', 'v23.0'),
         'site_url' => env('SITE_URL', 'https://geovizija.com'),
     ],
