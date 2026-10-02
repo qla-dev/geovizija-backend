@@ -50,12 +50,16 @@ Public (published posts only):
 | GET | `/api/categories/{slug}` | |
 | GET | `/api/posts` | `?category=<slug>&featured=1&search=<text>&per_page=12&page=1` |
 | GET | `/api/posts/{id or slug}` | |
+| GET | `/api/posts/{id or slug}/comments` | top-level comments newest first, each with `replies` (max 200) |
+| POST | `/api/posts/{id or slug}/comments` | `author, body, parentId?` (reply to a top-level comment); 5/min per IP, max one link, no duplicate within 10 min, hidden `website` honeypot must be empty |
+| POST / DELETE | `/api/comments/{id}/like` | add / remove a like; 30/min per IP |
 
 Admin (`Authorization: Bearer <ADMIN_API_TOKEN>`):
 
 | Method | Path | Body |
 | --- | --- | --- |
 | POST / PATCH / DELETE | `/api/categories[/{slug}]` | `slug, name, color, image_url, sort_order` |
+| DELETE | `/api/comments/{id}` | removes a comment and its replies |
 | POST / PATCH / DELETE | `/api/posts[/{id or slug}]` | `category (slug), title, slug?, excerpt, content, image_url, author, read_time?, featured, published_at` |
 
 `POST /api/posts/{id or slug}/generate-image` (admin) generates a new cover through OpenRouter and returns the updated post.
