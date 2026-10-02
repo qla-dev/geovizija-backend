@@ -35,7 +35,7 @@ class InstagramStory
     {
         $path = self::DIRECTORY.'/'.$post->slug.'-'.now()->format('YmdHis').'.jpg';
         File::ensureDirectoryExists(public_path(self::DIRECTORY));
-        $this->card($post, 1080, 1920, 280, true, public_path($path));
+        $this->card($post, 1080, 1920, 200, true, public_path($path));
 
         return $path;
     }
