@@ -35,6 +35,36 @@ class ImageOptimizeTest extends TestCase
         $this->assertGreaterThan(50, $bright);
     }
 
+    public function test_reprocess_rewrites_old_cover_and_inline_images_once(): void
+    {
+        $this->artisan('migrate');
+        $category = \App\Models\Category::create(['slug' => 'priroda', 'name' => 'Priroda', 'color' => 'x']);
+        \Illuminate\Support\Facades\File::ensureDirectoryExists(public_path('media/posts'));
+        foreach (['t-cover-20260101000000.jpg', 't-inline-1-20260101000000.jpg'] as $name) {
+            imagejpeg(imagecreatetruecolor(1200, 900), public_path("media/posts/{$name}"));
+        }
+        $post = \App\Models\Post::create([
+            'category_id' => $category->id, 'slug' => 't', 'title' => 'T', 'excerpt' => 'E', 'author' => 'A', 'read_time' => 1,
+            'image_url' => 'media/posts/t-cover-20260101000000.jpg',
+            'content' => "Pasus.\n\n![Opis](media/posts/t-inline-1-20260101000000.jpg)\n\nKraj.",
+        ]);
+
+        config(['services.admin.token' => 'admin-token']);
+        $this->withToken('admin-token')
+            ->postJson('/api/images/reprocess')->assertOk()->assertJsonPath("processed.{$post->id}", 2)->assertJsonPath('next', null);
+
+        $post->refresh();
+        $this->assertMatchesRegularExpression('#^media/posts/t-cover-\d{14}-wm\.jpg$#', $post->image_url);
+        $this->assertSame([1200, 675], array_slice(getimagesize(public_path($post->image_url)), 0, 2));
+        [$inline] = PostImageGenerator::inlinePaths($post->content);
+        $this->assertStringEndsWith('-wm.jpg', $inline);
+        $this->assertFileDoesNotExist(public_path('media/posts/t-cover-20260101000000.jpg'));
+
+        $this->postJson('/api/images/reprocess')->assertJsonPath('processed', []);
+
+        \Illuminate\Support\Facades\File::delete([public_path($post->image_url), public_path($inline)]);
+    }
+
     /** @return array<string, array{int, int, int, int}> */
     public static function shapes(): array
     {

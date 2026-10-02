@@ -87,6 +87,33 @@ class PostController extends Controller
     }
 
     /**
+     * Brings older images up to toJpeg() (16:9, logo, 100 KB), a few posts per call to stay inside
+     * hosting time limits: call with ?after=<next> until `next` is null.
+     */
+    public function reprocessImages(Request $request, PostImageGenerator $images)
+    {
+        $limit = min(max((int) $request->query('limit', 3), 1), 10);
+        $after = (int) $request->query('after', 0);
+        $processed = [];
+        $last = null;
+
+        foreach (Post::where('id', '>', $after)->orderBy('id')->lazy() as $post) {
+            $last = $post->id;
+            $paths = [$post->image_url, ...PostImageGenerator::inlinePaths((string) $post->content)];
+            if (collect($paths)->contains(fn ($path) => PostImageGenerator::needsReprocess($path))) {
+                $processed[$post->id] = $images->reprocess($post);
+                if (count($processed) >= $limit) {
+                    break;
+                }
+            }
+        }
+
+        $more = $last !== null && Post::where('id', '>', $last)->exists();
+
+        return response()->json(['processed' => $processed, 'next' => $more ? $last : null]);
+    }
+
+    /**
      * Link-preview fields of a published or scheduled article, for the frontend's og.php:
      * Facebook reads the preview when a scheduled Page post is created, before the article is public.
      * Drafts are 404; the body is not included.

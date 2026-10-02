@@ -66,6 +66,13 @@ class MetaPublisher
             $params['scheduled_publish_time'] = $scheduledFor->getTimestamp();
         }
 
+        // Facebook keeps a link's preview for weeks; re-read it so a new cover or title shows.
+        try {
+            Http::asForm()->timeout(20)->post($this->graph(''), ['id' => $params['link'], 'scrape' => 'true', 'access_token' => $params['access_token']]);
+        } catch (Throwable) {
+            // The post still goes out, with whatever preview Facebook has.
+        }
+
         try {
             $response = Http::asForm()->timeout(30)->post($this->endpoint(), $params);
         } catch (Throwable $exception) {
@@ -74,6 +81,15 @@ class MetaPublisher
 
         if (! $response->successful() || ! $response->json('id')) {
             return $this->fail($post, 'Facebook je odbio objavu: '.($response->json('error.message') ?? "HTTP {$response->status()}"));
+        }
+
+        // A forced re-share replaces the earlier Page post (removed only once the new one exists).
+        if ($force && $post->meta_post_id && $post->meta_post_id !== $response->json('id')) {
+            try {
+                Http::timeout(20)->delete($this->graph($post->meta_post_id).'?'.http_build_query(['access_token' => $params['access_token']]));
+            } catch (Throwable $exception) {
+                Log::warning("Old Facebook post {$post->meta_post_id} not deleted: {$exception->getMessage()}");
+            }
         }
 
         $post->forceFill([
@@ -100,11 +116,12 @@ class MetaPublisher
 
     private function endpoint(): string
     {
-        return sprintf(
-            'https://graph.facebook.com/%s/%s/feed',
-            config('services.meta.graph_version'),
-            config('services.meta.page_id'),
-        );
+        return $this->graph(config('services.meta.page_id').'/feed');
+    }
+
+    private function graph(string $path): string
+    {
+        return sprintf('https://graph.facebook.com/%s/%s', config('services.meta.graph_version'), $path);
     }
 
     private function fail(Post $post, string $message): array

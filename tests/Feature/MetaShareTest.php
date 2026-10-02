@@ -65,7 +65,7 @@ class MetaShareTest extends TestCase
         $result = app(MetaPublisher::class)->share($this->article(['published_at' => $at]));
 
         $this->assertSame('scheduled', $result['status']);
-        Http::assertSent(fn (Request $r) => $r['published'] === 'false' && (int) $r['scheduled_publish_time'] === $at->getTimestamp());
+        Http::assertSent(fn (Request $r) => $r->url() === self::FEED && $r['published'] === 'false' && (int) $r['scheduled_publish_time'] === $at->getTimestamp());
     }
 
     public function test_schedule_closer_than_ten_minutes_moves_to_facebook_minimum(): void
@@ -74,7 +74,7 @@ class MetaShareTest extends TestCase
         $this->travelTo(now()->startOfMinute());
         app(MetaPublisher::class)->share($this->article(['published_at' => now()->addMinutes(3)]));
 
-        Http::assertSent(fn (Request $r) => (int) $r['scheduled_publish_time'] === now()->addMinutes(11)->getTimestamp());
+        Http::assertSent(fn (Request $r) => $r->url() === self::FEED && (int) $r['scheduled_publish_time'] === now()->addMinutes(11)->getTimestamp());
     }
 
     public function test_more_than_thirty_days_ahead_is_not_shared(): void
@@ -150,10 +150,28 @@ class MetaShareTest extends TestCase
         $at = now()->addHours(10)->startOfMinute();
         $this->withToken('admin-token')->patchJson("/api/posts/{$id}", ['published_at' => $at->toIso8601String()])
             ->assertOk()->assertJsonPath('facebook.status', 'scheduled');
-        Http::assertSent(fn (Request $r) => (int) $r['scheduled_publish_time'] === $at->getTimestamp());
+        Http::assertSent(fn (Request $r) => $r->url() === self::FEED && (int) $r['scheduled_publish_time'] === $at->getTimestamp());
 
         $this->withToken('admin-token')->patchJson("/api/posts/{$id}", ['published_at' => now()->toIso8601String()])->assertJsonMissingPath('facebook');
-        Http::assertSentCount(1);
+        $this->assertCount(1, Http::recorded(fn (Request $r) => $r->url() === self::FEED));
+    }
+
+    public function test_forced_reshare_refreshes_preview_and_replaces_old_post(): void
+    {
+        $this->fakeFacebook();
+        $post = $this->article();
+        $post->forceFill(['meta_post_id' => '123_1'])->save();
+
+        app(MetaPublisher::class)->share($post, force: true);
+
+        $urls = Http::recorded()->map(fn ($pair) => $pair[0]->method().' '.strtok($pair[0]->url(), '?'))->all();
+        $this->assertSame([
+            'POST https://graph.facebook.com/v23.0/',
+            'POST '.self::FEED,
+            'DELETE https://graph.facebook.com/v23.0/123_1',
+        ], $urls);
+        Http::assertSent(fn (Request $r) => ($r->data()['scrape'] ?? null) === 'true' && $r->data()['id'] === 'https://geovizija.com/article/berat-grad');
+        $this->assertSame('123_456', $post->refresh()->meta_post_id);
     }
 
     public function test_preview_serves_scheduled_articles_but_not_drafts(): void

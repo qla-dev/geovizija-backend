@@ -34,6 +34,9 @@ class PostImageGenerator
 
     private const QUALITY_FLOOR = 42;
 
+    /** Ends the file name of every image saved through toJpeg(), e.g. media/posts/una-20261002180000-wm.jpg. */
+    private const PROCESSED_MARK = '-wm';
+
     /**
      * Stores the cover image as the post's image_url: the supplied $source (data URL or https
      * link) when given, otherwise one drawn through OpenRouter.
@@ -106,6 +109,53 @@ class PostImageGenerator
         }
 
         return $path;
+    }
+
+    /** Whether a stored path is one of ours from before toJpeg() cropped and watermarked images. */
+    public static function needsReprocess(?string $path): bool
+    {
+        return self::isGenerated($path) && ! str_contains((string) $path, self::PROCESSED_MARK.'.');
+    }
+
+    /**
+     * Runs the post's older cover and in-text images through toJpeg() (16:9, logo, 100 KB) under new
+     * names, so Facebook and browsers do not keep the old copies. Missing files are left as they are.
+     * Returns how many images were rewritten.
+     */
+    public function reprocess(Post $post): int
+    {
+        $done = 0;
+        $rewrite = function (string $path) use (&$done): ?string {
+            if (! File::exists(public_path($path))) {
+                return null;
+            }
+            $basename = preg_replace('/-\d{14}$/', '', pathinfo($path, PATHINFO_FILENAME));
+            $new = $this->save(['bytes' => File::get(public_path($path)), 'mime' => 'image/jpeg', 'extension' => pathinfo($path, PATHINFO_EXTENSION)], $basename);
+            $done++;
+
+            return $new;
+        };
+
+        $cover = self::needsReprocess($post->image_url) ? $rewrite($post->image_url) : null;
+        $content = (string) $post->content;
+        $old = [];
+        foreach (self::inlinePaths($content) as $path) {
+            if (self::needsReprocess($path) && ($new = $rewrite($path))) {
+                $content = str_replace("]({$path})", "]({$new})", $content);
+                $old[] = $path;
+            }
+        }
+
+        $previousCover = $post->image_url;
+        $post->update(array_filter(['image_url' => $cover, 'content' => $old ? $content : null]));
+        if ($cover) {
+            File::delete(public_path($previousCover));
+        }
+        foreach ($old as $path) {
+            File::delete(public_path($path));
+        }
+
+        return $done;
     }
 
     public static function pendingInline(Post $post): int
@@ -234,8 +284,10 @@ class PostImageGenerator
     /** Saves image bytes (as JPEG when possible) under public/media/posts; returns the relative path. */
     private function save(array $image, string $basename): string
     {
+        $original = $image['bytes'];
         $image = self::toJpeg($image);
-        $path = self::DIRECTORY.'/'.$basename.'-'.now()->format('YmdHis').'.'.$image['extension'];
+        $mark = $image['bytes'] !== $original ? self::PROCESSED_MARK : '';
+        $path = self::DIRECTORY.'/'.$basename.'-'.now()->format('YmdHis').$mark.'.'.$image['extension'];
         File::ensureDirectoryExists(public_path(self::DIRECTORY));
         File::put(public_path($path), $image['bytes']);
 
