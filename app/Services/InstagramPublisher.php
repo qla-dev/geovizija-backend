@@ -25,6 +25,9 @@ use Throwable;
  */
 class InstagramPublisher
 {
+    /** One-time image copies handed to Instagram for the current post (see feedImage). */
+    private array $temporary = [];
+
     public static function configured(): bool
     {
         return filled(config('services.meta.ig_user_id')) && filled(config('services.meta.page_token'));
@@ -71,6 +74,10 @@ class InstagramPublisher
             $published = $this->publishContainer($container['id']);
         } catch (Throwable $exception) {
             return $this->fail($post, 'Instagram nije dostupan: '.$exception->getMessage());
+        } finally {
+            // Instagram has its copy once the container is processed.
+            File::delete(array_map('public_path', $this->temporary));
+            $this->temporary = [];
         }
 
         if (! $published->successful() || ! $published->json('id')) {
@@ -204,7 +211,15 @@ class InstagramPublisher
     {
         if (PostImageGenerator::isGenerated($post->image_url)) {
             try {
-                return asset(app(InstagramStory::class)->feed($post));
+                // Instagram (and the host's cache) keep what they once fetched from a URL, so it gets
+                // a one-time copy under a new name, removed after publishing (see $this->temporary).
+                $saved = app(InstagramStory::class)->feed($post);
+                $copy = InstagramStory::DIRECTORY.'/'.$post->slug.'-'.now()->format('YmdHis').'-ig.jpg';
+                File::ensureDirectoryExists(public_path(InstagramStory::DIRECTORY));
+                File::copy(public_path($saved), public_path($copy));
+                $this->temporary[] = $copy;
+
+                return asset($copy);
             } catch (Throwable $exception) {
                 Log::warning("Instagram image for post {$post->id} not drawn: {$exception->getMessage()}");
             }
