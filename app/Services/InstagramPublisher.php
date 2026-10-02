@@ -77,8 +77,10 @@ class InstagramPublisher
             return $this->fail($post, 'Instagram je odbio objavu: '.($published->json('error.message') ?? "HTTP {$published->status()}"));
         }
 
-        // Then the full-screen story; a failed story keeps the post and is noted in ig_error.
-        $story = $this->story($post);
+        // Then the full-screen story when the daily story budget allows; a failed story keeps the
+        // post and is noted in ig_error.
+        $withStory = self::storyDue();
+        $story = $withStory ? $this->story($post) : null;
 
         $post->forceFill([
             'ig_status' => 'posted',
@@ -89,13 +91,53 @@ class InstagramPublisher
 
         return [
             'status' => 'posted',
-            'message' => 'Članak je objavljen na Instagramu'.($story === null ? ' (i story).' : "; story nije: {$story}"),
+            'message' => 'Članak je objavljen na Instagramu'.match (true) {
+                ! $withStory => ' (bez storyja, dnevni raspored storyja).',
+                $story === null => ' (i story).',
+                default => "; story nije: {$story}",
+            },
             'mediaId' => $post->ig_media_id,
         ];
     }
 
+    /**
+     * Stories are rationed so posts keep room in Instagram's 100 per 24 hours: at most
+     * services.meta.ig_stories_per_day in 24 hours, at least ig_story_gap_minutes apart, which
+     * spreads them over the day.
+     */
+    public static function storyDue(): bool
+    {
+        $recent = self::recentStories();
+
+        return count($recent) < (int) config('services.meta.ig_stories_per_day', 20)
+            && (! $recent || max($recent) <= now()->subMinutes((int) config('services.meta.ig_story_gap_minutes', 45))->getTimestamp());
+    }
+
+    /** @return list<int> timestamps of stories in the last 24 hours */
+    private static function recentStories(): array
+    {
+        $since = now()->subDay()->getTimestamp();
+
+        $saved = json_decode((string) @file_get_contents(storage_path(self::STORIES_FILE)), true);
+
+        return array_values(array_filter(is_array($saved) ? $saved : [], fn ($at) => $at > $since));
+    }
+
+    /** Kept outside the cache, which every redeploy clears. */
+    private const STORIES_FILE = 'app/instagram-stories.json';
+
     /** Publishes the article's story (see InstagramStory); returns null or why it failed. */
     public function story(Post $post): ?string
+    {
+        $error = $this->publishStory($post);
+        if ($error === null) {
+            File::put(storage_path(self::STORIES_FILE), json_encode([...self::recentStories(), now()->getTimestamp()]));
+        }
+
+        return $error;
+    }
+
+    private function publishStory(Post $post): ?string
     {
         try {
             $path = app(InstagramStory::class)->make($post);

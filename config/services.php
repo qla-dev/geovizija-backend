@@ -59,6 +59,10 @@ return [
         // Instagram professional account linked to the Page (App\Services\InstagramPublisher); the
         // Page token needs instagram_basic and instagram_content_publish.
         'ig_user_id' => env('META_IG_USER_ID'),
+        // Stories after Instagram posts: at most this many per 24 hours, this far apart (posts and
+        // stories share Instagram's 100 API posts per 24 hours).
+        'ig_stories_per_day' => (int) env('META_IG_STORIES_PER_DAY', 20),
+        'ig_story_gap_minutes' => (int) env('META_IG_STORY_GAP_MINUTES', 45),
         'graph_version' => env('META_GRAPH_VERSION', 'v23.0'),
         'site_url' => env('SITE_URL', 'https://geovizija.com'),
     ],

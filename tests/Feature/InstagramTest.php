@@ -90,6 +90,36 @@ class InstagramTest extends TestCase
         \Illuminate\Support\Facades\File::delete(public_path('media/posts/story-test-w3.jpg'));
     }
 
+    public function test_stories_are_rationed_per_day_and_spaced(): void
+    {
+        config(['services.meta.ig_stories_per_day' => 2, 'services.meta.ig_story_gap_minutes' => 45]);
+        $this->travelTo(now()->startOfDay()->addHours(8));
+        $this->assertTrue(InstagramPublisher::storyDue());
+
+        $this->storiesAt([now()->subMinutes(10)]);
+        $this->assertFalse(InstagramPublisher::storyDue());
+
+        $this->travel(40)->minutes();
+        $this->assertTrue(InstagramPublisher::storyDue());
+
+        $this->storiesAt([now()->subHours(3), now()->subHours(2)]);
+        $this->assertFalse(InstagramPublisher::storyDue());
+
+        $this->travel(22)->hours();
+        $this->assertTrue(InstagramPublisher::storyDue());
+    }
+
+    private function storiesAt(array $times): void
+    {
+        file_put_contents(storage_path('app/instagram-stories.json'), json_encode(array_map(fn ($t) => $t->getTimestamp(), $times)));
+    }
+
+    protected function tearDown(): void
+    {
+        @unlink(storage_path('app/instagram-stories.json'));
+        parent::tearDown();
+    }
+
     public function test_scheduled_unqueued_and_skipped_articles_wait(): void
     {
         $this->fakeInstagram();
