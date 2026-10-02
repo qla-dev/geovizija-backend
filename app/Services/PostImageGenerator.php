@@ -35,10 +35,7 @@ class PostImageGenerator
     private const QUALITY_FLOOR = 42;
 
     /** Ends the file name of every image saved through toJpeg(), e.g. media/posts/una-20261002180000-wm.jpg. */
-    private const PROCESSED_MARK = '-w2';
-
-    /** Mark of the first format (large logo with a shadow); reprocess() cuts that logo off. */
-    private const OLD_LOGO_MARK = '-wm';
+    private const PROCESSED_MARK = '-w3';
 
     /**
      * Stores the cover image as the post's image_url: the supplied $source (data URL or https
@@ -134,8 +131,10 @@ class PostImageGenerator
             }
             $basename = preg_replace('/-\d{14}(-w[m2])?$/', '', pathinfo($path, PATHINFO_FILENAME));
             $bytes = File::get(public_path($path));
-            if (str_contains($path, self::OLD_LOGO_MARK.'.')) {
-                $bytes = self::withoutOldLogo($bytes);
+            foreach (array_keys(self::OLD_LOGOS) as $mark) {
+                if (str_contains($path, $mark.'.')) {
+                    $bytes = self::withoutOldLogo($bytes, $mark);
+                }
             }
             $new = $this->save(['bytes' => $bytes, 'mime' => 'image/jpeg', 'extension' => pathinfo($path, PATHINFO_EXTENSION)], $basename);
             $done++;
@@ -166,18 +165,24 @@ class PostImageGenerator
     }
 
     /**
-     * The originals of the first format are gone, so its logo (max(150 px, 20 %) wide, 739:304,
-     * 1.2 % from the bottom-right edge) is cut off: the image keeps everything above it, centred
-     * at 16:9, and toJpeg() then adds the current logo.
+     * Earlier formats put the logo bottom-right and their originals are gone, so that logo is cut
+     * off: the image keeps everything above it, centred at 16:9, and toJpeg() then adds the
+     * current logo. Per mark: [min logo width px, logo width share, logo height/width, margin share].
      */
-    private static function withoutOldLogo(string $bytes): string
+    private const OLD_LOGOS = [
+        '-wm' => [150, 0.2, 304 / 739, 0.012],   // large, with a shadow
+        '-w2' => [110, 0.11, 208 / 643, 0.02],   // small green
+    ];
+
+    private static function withoutOldLogo(string $bytes, string $mark): string
     {
         $source = @imagecreatefromstring($bytes);
         if ($source === false) {
             return $bytes;
         }
+        [$minWidth, $share, $ratio, $marginShare] = self::OLD_LOGOS[$mark];
         [$width, $height] = [imagesx($source), imagesy($source)];
-        $cropHeight = (int) floor($height - $width * 0.012 - max(150, $width * 0.2) * 304 / 739 - 4);
+        $cropHeight = (int) floor($height - $width * $marginShare - max($minWidth, $width * $share) * $ratio - 4);
         $cropWidth = min($width, (int) round($cropHeight * 16 / 9));
         $canvas = imagecreatetruecolor($cropWidth, $cropHeight);
         imagecopy($canvas, $source, 0, 0, intdiv($width - $cropWidth, 2), 0, $cropWidth, $cropHeight);
@@ -384,7 +389,8 @@ class PostImageGenerator
 
     /**
      * A $width-wide 16:9 copy of $source (centre crop, so Facebook shows the large link preview
-     * whatever shape the agent or model sent) with the logo bottom-right (about a ninth of the width, no shadow).
+     * whatever shape the agent or model sent) with the logo top-left like news photo agencies:
+     * all white, semi-transparent, a fifth of the width.
      */
     private static function watermarked(\GdImage $source, int $width): \GdImage
     {
@@ -397,11 +403,11 @@ class PostImageGenerator
 
         $logo = @imagecreatefrompng(resource_path('images/watermark.png'));
         if ($logo !== false) {
-            $logoWidth = (int) round(max(110, $width * 0.11));
+            $logoWidth = (int) round(max(140, $width * 0.2));
             $logoHeight = (int) round(imagesy($logo) * $logoWidth / imagesx($logo));
-            $margin = (int) round($width * 0.02);
+            $margin = (int) round($width * 0.035);
             imagealphablending($canvas, true);
-            imagecopyresampled($canvas, $logo, $width - $logoWidth - $margin, $height - $logoHeight - $margin, 0, 0, $logoWidth, $logoHeight, imagesx($logo), imagesy($logo));
+            imagecopyresampled($canvas, $logo, $margin, $margin, 0, 0, $logoWidth, $logoHeight, imagesx($logo), imagesy($logo));
             imagedestroy($logo);
         }
 

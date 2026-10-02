@@ -24,12 +24,12 @@ class ImageOptimizeTest extends TestCase
         $this->assertLessThanOrEqual(100_000, strlen($jpeg['bytes']));
         $this->assertSame([1600, 900], [$width, $height]);
 
-        // The bottom-right corner now carries the white logo text.
+        // The top-left corner now carries the semi-transparent white logo.
         $out = imagecreatefromstring($jpeg['bytes']);
         $bright = 0;
-        for ($x = 1300; $x < 1590; $x += 2) {
-            for ($y = 820; $y < 890; $y += 2) {
-                $bright += (imagecolorat($out, $x, $y) & 0xFF) > 230 ? 1 : 0;
+        for ($x = 60; $x < 380; $x += 2) {
+            for ($y = 60; $y < 150; $y += 2) {
+                $bright += (imagecolorat($out, $x, $y) & 0xFF) > 170 ? 1 : 0;
             }
         }
         $this->assertGreaterThan(50, $bright);
@@ -54,10 +54,10 @@ class ImageOptimizeTest extends TestCase
             ->postJson('/api/images/reprocess')->assertOk()->assertJsonPath("processed.{$post->id}", 2)->assertJsonPath('next', null);
 
         $post->refresh();
-        $this->assertMatchesRegularExpression('#^media/posts/t-cover-\d{14}-w2.jpg$#', $post->image_url);
+        $this->assertMatchesRegularExpression('#^media/posts/t-cover-\d{14}-w3.jpg$#', $post->image_url);
         $this->assertSame([1200, 675], array_slice(getimagesize(public_path($post->image_url)), 0, 2));
         [$inline] = PostImageGenerator::inlinePaths($post->content);
-        $this->assertStringEndsWith('-w2.jpg', $inline);
+        $this->assertStringEndsWith('-w3.jpg', $inline);
         $this->assertFileDoesNotExist(public_path('media/posts/t-cover-20260101000000.jpg'));
 
         $this->postJson('/api/images/reprocess')->assertJsonPath('processed', []);
