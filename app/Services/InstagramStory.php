@@ -34,32 +34,42 @@ class InstagramStory
         }
 
         $story = imagecreatetruecolor(self::WIDTH, self::HEIGHT);
-        $this->background($story, $cover);
-
         $white = imagecolorallocate($story, 255, 255, 255);
         $green = imagecolorallocate($story, ...self::GREEN);
         $black = $this->font('Black');
         $regular = $this->font('Regular');
 
-        // All text at the bottom, built upwards from just above Instagram's reply bar.
+        // All text at the bottom, laid out upwards from just above Instagram's reply bar; drawn after
+        // the background, whose shade starts above the text block wherever it ends up.
         $left = 80;
+        $draw = [];
         $baseline = self::HEIGHT - 280;
-        imagettftext($story, 26, 0, $left, $baseline, $green, $black, 'LINK U OPISU PROFILA');
+        $draw[] = fn () => imagettftext($story, 26, 0, $left, self::HEIGHT - 280, $green, $black, 'LINK U OPISU PROFILA');
         $baseline -= 62;
-        imagettftext($story, 26, 0, $left, $baseline, $white, $regular, 'Cijeli članak na geovizija.com');
+        $draw[] = fn () => imagettftext($story, 26, 0, $left, self::HEIGHT - 342, $white, $regular, 'Cijeli članak na geovizija.com');
 
         $lines = $this->wrap($post->title, $black, 46, 920, 4);
         $baseline -= 110 + (count($lines) - 1) * 84;
-        foreach ($lines as $i => $line) {
-            imagettftext($story, 46, 0, $left, $baseline + $i * 84, $white, $black, $line);
-        }
+        $titleTop = $baseline;
+        $draw[] = function () use ($story, $lines, $left, $titleTop, $white, $black) {
+            foreach ($lines as $i => $line) {
+                imagettftext($story, 46, 0, $left, $titleTop + $i * 84, $white, $black, $line);
+            }
+        };
         $baseline -= 92;
         $post->loadMissing('category');
         if ($post->category) {
-            imagettftext($story, 22, 0, $left, $baseline, $green, $black, mb_strtoupper($post->category->name));
+            $categoryAt = $baseline;
+            $draw[] = fn () => imagettftext($story, 22, 0, $left, $categoryAt, $green, $black, mb_strtoupper($post->category->name));
             $baseline -= 70;
         }
-        $this->logo($story, $left, $baseline - 48, $white, $green, $black);
+        $logoTop = $baseline - 48;
+        $draw[] = fn () => $this->logo($story, $left, $logoTop, $white, $green, $black);
+
+        $this->background($story, $cover, $logoTop);
+        foreach ($draw as $step) {
+            $step();
+        }
 
         $path = self::DIRECTORY.'/'.$post->slug.'-'.now()->format('YmdHis').'.jpg';
         File::ensureDirectoryExists(public_path(self::DIRECTORY));
@@ -70,18 +80,21 @@ class InstagramStory
         return $path;
     }
 
-    /** The cover filling the screen (centre crop to 9:16, sharp), darkened towards the bottom for the text. */
-    private function background(\GdImage $story, \GdImage $cover): void
+    /**
+     * The cover filling the screen (centre crop to 9:16, sharp), with a shade that grows evenly from
+     * 700 px above the text block to about 92 % black at the bottom edge, so the text reads on any photo.
+     */
+    private function background(\GdImage $story, \GdImage $cover, int $textTop): void
     {
         $cropWidth = min(imagesx($cover), (int) round(imagesy($cover) * 9 / 16));
         $cropHeight = min(imagesy($cover), (int) round($cropWidth * 16 / 9));
         imagecopyresampled($story, $cover, 0, 0, intdiv(imagesx($cover) - $cropWidth, 2), intdiv(imagesy($cover) - $cropHeight, 2), self::WIDTH, self::HEIGHT, $cropWidth, $cropHeight);
 
         imagealphablending($story, true);
-        $from = (int) (self::HEIGHT * 0.45);
-        for ($y = $from; $y < self::HEIGHT; $y += 4) {
+        $from = max(0, $textTop - 700);
+        for ($y = $from; $y < self::HEIGHT; $y += 2) {
             $shade = ($y - $from) / (self::HEIGHT - $from);
-            imagefilledrectangle($story, 0, $y, self::WIDTH, $y + 3, imagecolorallocatealpha($story, 0, 0, 0, (int) round(127 - 105 * min(1, $shade * 1.3))));
+            imagefilledrectangle($story, 0, $y, self::WIDTH, $y + 1, imagecolorallocatealpha($story, 0, 0, 0, (int) round(127 - 117 * $shade)));
         }
     }
 
