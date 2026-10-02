@@ -54,10 +54,10 @@ class ImageOptimizeTest extends TestCase
             ->postJson('/api/images/reprocess')->assertOk()->assertJsonPath("processed.{$post->id}", 2)->assertJsonPath('next', null);
 
         $post->refresh();
-        $this->assertMatchesRegularExpression('#^media/posts/t-cover-\d{14}-wm\.jpg$#', $post->image_url);
+        $this->assertMatchesRegularExpression('#^media/posts/t-cover-\d{14}-w2.jpg$#', $post->image_url);
         $this->assertSame([1200, 675], array_slice(getimagesize(public_path($post->image_url)), 0, 2));
         [$inline] = PostImageGenerator::inlinePaths($post->content);
-        $this->assertStringEndsWith('-wm.jpg', $inline);
+        $this->assertStringEndsWith('-w2.jpg', $inline);
         $this->assertFileDoesNotExist(public_path('media/posts/t-cover-20260101000000.jpg'));
 
         $this->postJson('/api/images/reprocess')->assertJsonPath('processed', []);

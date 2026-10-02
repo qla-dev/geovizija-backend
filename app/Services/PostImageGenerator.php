@@ -35,7 +35,10 @@ class PostImageGenerator
     private const QUALITY_FLOOR = 42;
 
     /** Ends the file name of every image saved through toJpeg(), e.g. media/posts/una-20261002180000-wm.jpg. */
-    private const PROCESSED_MARK = '-wm';
+    private const PROCESSED_MARK = '-w2';
+
+    /** Mark of the first format (large logo with a shadow); reprocess() cuts that logo off. */
+    private const OLD_LOGO_MARK = '-wm';
 
     /**
      * Stores the cover image as the post's image_url: the supplied $source (data URL or https
@@ -129,8 +132,12 @@ class PostImageGenerator
             if (! File::exists(public_path($path))) {
                 return null;
             }
-            $basename = preg_replace('/-\d{14}$/', '', pathinfo($path, PATHINFO_FILENAME));
-            $new = $this->save(['bytes' => File::get(public_path($path)), 'mime' => 'image/jpeg', 'extension' => pathinfo($path, PATHINFO_EXTENSION)], $basename);
+            $basename = preg_replace('/-\d{14}(-w[m2])?$/', '', pathinfo($path, PATHINFO_FILENAME));
+            $bytes = File::get(public_path($path));
+            if (str_contains($path, self::OLD_LOGO_MARK.'.')) {
+                $bytes = self::withoutOldLogo($bytes);
+            }
+            $new = $this->save(['bytes' => $bytes, 'mime' => 'image/jpeg', 'extension' => pathinfo($path, PATHINFO_EXTENSION)], $basename);
             $done++;
 
             return $new;
@@ -156,6 +163,30 @@ class PostImageGenerator
         }
 
         return $done;
+    }
+
+    /**
+     * The originals of the first format are gone, so its logo (max(150 px, 20 %) wide, 739:304,
+     * 1.2 % from the bottom-right edge) is cut off: the image keeps everything above it, centred
+     * at 16:9, and toJpeg() then adds the current logo.
+     */
+    private static function withoutOldLogo(string $bytes): string
+    {
+        $source = @imagecreatefromstring($bytes);
+        if ($source === false) {
+            return $bytes;
+        }
+        [$width, $height] = [imagesx($source), imagesy($source)];
+        $cropHeight = (int) floor($height - $width * 0.012 - max(150, $width * 0.2) * 304 / 739 - 4);
+        $cropWidth = min($width, (int) round($cropHeight * 16 / 9));
+        $canvas = imagecreatetruecolor($cropWidth, $cropHeight);
+        imagecopy($canvas, $source, 0, 0, intdiv($width - $cropWidth, 2), 0, $cropWidth, $cropHeight);
+        ob_start();
+        imagejpeg($canvas, null, 95);
+        imagedestroy($source);
+        imagedestroy($canvas);
+
+        return (string) ob_get_clean();
     }
 
     public static function pendingInline(Post $post): int
@@ -353,7 +384,7 @@ class PostImageGenerator
 
     /**
      * A $width-wide 16:9 copy of $source (centre crop, so Facebook shows the large link preview
-     * whatever shape the agent or model sent) with the logo bottom-right (about a fifth of the width).
+     * whatever shape the agent or model sent) with the logo bottom-right (about a ninth of the width, no shadow).
      */
     private static function watermarked(\GdImage $source, int $width): \GdImage
     {
@@ -366,9 +397,9 @@ class PostImageGenerator
 
         $logo = @imagecreatefrompng(resource_path('images/watermark.png'));
         if ($logo !== false) {
-            $logoWidth = (int) round(max(150, $width * 0.2));
+            $logoWidth = (int) round(max(110, $width * 0.11));
             $logoHeight = (int) round(imagesy($logo) * $logoWidth / imagesx($logo));
-            $margin = (int) round($width * 0.012);
+            $margin = (int) round($width * 0.02);
             imagealphablending($canvas, true);
             imagecopyresampled($canvas, $logo, $width - $logoWidth - $margin, $height - $logoHeight - $margin, 0, 0, $logoWidth, $logoHeight, imagesx($logo), imagesy($logo));
             imagedestroy($logo);
