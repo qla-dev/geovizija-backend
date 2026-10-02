@@ -23,7 +23,7 @@ Goal: a short magazine article with a cover image and two in-text images, publis
 4. `POST /posts/{id}/generate-image` — draws the cover (~20 s).
 5. `POST /posts/{id}/generate-inline-image` — draws the next `[[SLIKA: …]]` image. Call it again until the response shows `"pending": 0` (two calls for two markers).
 6. Publish: `PATCH /posts/{id}` with `{"published_at": "<now, ISO 8601>"}`.
-7. Report the title and `https://geovizija.com/#/article/{id}`.
+7. Report the title and `https://geovizija.com/article/{slug}`.
 
 If an image call fails, retry it once. If it still fails, leave the post as a draft and report it; do not publish an article without its cover.
 

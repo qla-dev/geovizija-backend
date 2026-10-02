@@ -7,10 +7,9 @@ use App\Models\Post;
 use App\Services\MetaPublisher;
 
 /**
- * /share/{slug}: the link posted to Facebook. Crawlers read its Open Graph tags
- * (the site's #/article URLs cannot be previewed); people are sent on to the article.
- * Scheduled articles render too, because Facebook reads the preview when the
- * scheduled post is created.
+ * /share/{slug}: links shared before clean URLs. Facebook now links straight to
+ * /article/{slug} (previewed by the frontend's og.php); this page keeps the old
+ * links working: Open Graph tags for crawlers, a redirect for people.
  */
 class ShareController extends Controller
 {
@@ -22,8 +21,8 @@ class ShareController extends Controller
             'title' => $post->title,
             'description' => $post->excerpt,
             'image' => $data['imageUrl'],
-            'shareUrl' => MetaPublisher::shareUrl($post),
-            'articleUrl' => rtrim((string) config('services.meta.site_url'), '/')."/#/article/{$post->id}",
+            'shareUrl' => MetaPublisher::articleUrl($post),
+            'articleUrl' => MetaPublisher::articleUrl($post),
         ]);
     }
 }

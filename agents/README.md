@@ -27,7 +27,7 @@ Once the images are done, a new article is also shared on the Geovizija Facebook
 
 ### Editing an existing article
 
-Add `"id"` (the number from `https://geovizija.com/#/article/{id}`) and send only what changes; everything else, including the slug and URL, stays:
+Add `"id"` (the post id, `data.id` in the publish response or from `GET /posts/{slug}`) and send only what changes; everything else, including the slug and URL, stays:
 
 ```json
 {"secret": "…", "type": "article", "id": 12, "title": "…", "excerpt": "…", "content": "…"}
@@ -82,4 +82,4 @@ Public reads: `GET /posts`, `/posts/{id or slug}`, `/categories`, `/quizzes`, `/
 - Write in Bosnian (ijekavica, latinica), National Geographic tone, only well-known verifiable facts. No invented quotes, experts, institutions or statistics.
 - Never delete or overwrite existing content unless the task explicitly says so.
 - If a call fails, read the JSON `message`, fix the payload and retry once; do not loop.
-- Finish with a short report: what was created (titles, ids, URLs `https://geovizija.com/#/article/{id}` / `#/quiz/{date}`) and anything that failed.
+- Finish with a short report: what was created (titles, ids, URLs `https://geovizija.com/article/{slug}` / `/quiz/{date}`) and anything that failed.

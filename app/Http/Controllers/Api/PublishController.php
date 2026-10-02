@@ -20,7 +20,7 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Publishes a Claude-written article or quiz pasted as JSON (frontend /#/objavi or any HTTP client).
+ * Publishes a Claude-written article or quiz pasted as JSON (frontend /objavi or any HTTP client).
  * The JSON itself carries the publish secret; without the right one nothing is stored.
  *
  *   {"secret": "...", "type": "article", "category": "priroda", "title": "...", "excerpt": "...", "content": "...", "publishedAt"?: "ISO 8601"}
@@ -128,7 +128,7 @@ class PublishController extends Controller
                 : 'Članak je objavljen.',
             'publishedAt' => $publishAt->toIso8601String(),
             'scheduled' => $publishAt->isFuture(),
-            'url' => "https://geovizija.com/#/article/{$post->id}",
+            'url' => MetaPublisher::articleUrl($post),
             'warnings' => $warnings,
             'images' => $sources,
             'facebook' => $facebook,
@@ -249,7 +249,7 @@ class PublishController extends Controller
         return response()->json([
             'message' => 'Članak je ažuriran.',
             'changed' => $changed,
-            'url' => "https://geovizija.com/#/article/{$post->id}",
+            'url' => MetaPublisher::articleUrl($post),
             'warnings' => $warnings,
             'images' => $sources,
             'data' => new PostResource($post->refresh()->load('category')),
@@ -278,7 +278,7 @@ class PublishController extends Controller
 
         return response()->json([
             'message' => 'Kviz je objavljen.',
-            'url' => "https://geovizija.com/#/quiz/{$quiz->date->toDateString()}",
+            'url' => "https://geovizija.com/quiz/{$quiz->date->toDateString()}",
             'warnings' => [],
         ], 201);
     }

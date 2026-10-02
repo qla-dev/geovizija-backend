@@ -52,7 +52,7 @@ class MetaShareTest extends TestCase
         $this->assertSame('posted', $result['status']);
         $this->assertSame('123_456', $post->refresh()->meta_post_id);
         Http::assertSent(fn (Request $r) => $r->url() === self::FEED
-            && $r['link'] === 'https://geovizija.com/endpoints/share/berat-grad'
+            && $r['link'] === 'https://geovizija.com/article/berat-grad'
             && $r['message'] === "Berat, grad hiljadu prozora\n\nKratki uvod."
             && $r['access_token'] === 'page-token'
             && ! isset($r['published']));
@@ -129,8 +129,8 @@ class MetaShareTest extends TestCase
             ->assertOk()
             ->assertSee('<meta property="og:title" content="Berat, grad hiljadu prozora">', false)
             ->assertSee('<meta property="og:image" content="'.asset('media/posts/berat.jpg').'">', false)
-            ->assertSee('<meta property="og:url" content="https://geovizija.com/endpoints/share/berat-grad">', false)
-            ->assertSee("https://geovizija.com/#/article/{$post->id}", false);
+            ->assertSee('<meta property="og:url" content="https://geovizija.com/article/berat-grad">', false)
+            ->assertSee('url=https://geovizija.com/article/berat-grad', false);
 
         $this->get('/share/ne-postoji')->assertNotFound();
     }

@@ -46,7 +46,7 @@ Generated text can contain inaccurate specifics; the prompt forbids invented quo
 
 - Hooks: `/api/publish` (after the images) and admin `POST /api/posts`. Edits are not re-shared. `shareToMeta: false` in the publish JSON opts out.
 - Scheduled articles become scheduled Page posts (Business Suite Planner), so no cron or queue is needed. Facebook accepts 10 minutes to 30 days ahead.
-- Posts link to `SITE_URL/endpoints/share/{slug}` (`ShareController`, `resources/views/share.blade.php`): Open Graph tags for the preview, then a redirect to `#/article/{id}`. The site's own hash URLs cannot be previewed by Facebook.
+- Posts link to `SITE_URL/article/{slug}`. The frontend repo's `.htaccess` sends crawlers (facebookexternalhit, WhatsApp, Twitterbot, Googlebot…) asking for `/article/{slug}` or `/category/{slug}` to its `og.php`, which serves the app HTML with that page's Open Graph tags from this API. `/share/{slug}` (`ShareController`) only keeps links from before clean URLs working.
 - `posts.meta_post_id` prevents double posting; `posts.meta_error` keeps the last failure. Retry: `POST /api/posts/{id}/share-meta[?force=1]` (admin) or `php artisan posts:share-meta {ids...} [--force]` (writes to the database `.env` points at).
 - A failure is logged and returned as `facebook.status = failed`; it never blocks publishing.
 

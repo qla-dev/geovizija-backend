@@ -11,9 +11,8 @@ use Throwable;
 /**
  * Shares an article on the Geovizija Facebook Page through the Graph API.
  *
- * The post links to the backend share page (/share/{slug}), which carries the
- * Open Graph tags Facebook reads for the preview; the site's own #/article URLs
- * cannot be previewed. An article published now is posted at once; a scheduled
+ * The post links to the article (SITE_URL/article/{slug}); the frontend's og.php
+ * gives Facebook's crawler that article's Open Graph tags. An article published now is posted at once; a scheduled
  * one becomes a scheduled Page post (visible in the Business Suite Planner),
  * so no cron or queue is needed. Facebook only schedules 10 minutes to 30 days
  * ahead: closer times are moved to +10 minutes, later ones are not shared.
@@ -50,7 +49,7 @@ class MetaPublisher
 
         $params = [
             'message' => $this->message($post),
-            'link' => self::shareUrl($post),
+            'link' => self::articleUrl($post),
             'access_token' => config('services.meta.page_token'),
         ];
 
@@ -83,9 +82,9 @@ class MetaPublisher
     }
 
     /** Built from SITE_URL, not APP_URL, so a CLI run on another machine still links to the live site. */
-    public static function shareUrl(Post $post): string
+    public static function articleUrl(Post $post): string
     {
-        return rtrim((string) config('services.meta.site_url'), '/').'/endpoints/share/'.rawurlencode($post->slug);
+        return rtrim((string) config('services.meta.site_url'), '/').'/article/'.rawurlencode($post->slug);
     }
 
     private function message(Post $post): string

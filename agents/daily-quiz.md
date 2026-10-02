@@ -8,7 +8,7 @@ Goal: exactly one quiz per day, 10 multiple-choice questions, stored before visi
 2. Write the quiz (rules below), avoiding everything in `recentQuizQuestions`.
 3. `POST /quizzes` with the JSON body below. `date` defaults to today (Europe/Sarajevo).
 4. On 422 read `message` (e.g. a question without 4 distinct options), fix and resend once. On 409 the day already has a quiz: stop (only send `"replace": true` when the task explicitly asks to replace it).
-5. Report the title and `https://geovizija.com/#/quiz/{date}`.
+5. Report the title and `https://geovizija.com/quiz/{date}`.
 
 ## Body
 
