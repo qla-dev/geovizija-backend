@@ -287,26 +287,30 @@ class PostImageGenerator
             return $image;
         }
 
-        $bytes = '';
-        for ($width = min(imagesx($source), self::MAX_WIDTH); $width >= 640; $width = (int) round($width * 0.9)) {
+        $width = min(imagesx($source), (int) round(imagesy($source) * 16 / 9), self::MAX_WIDTH);
+        do {
             $canvas = self::watermarked($source, $width);
             $bytes = self::bestJpeg($canvas);
             imagedestroy($canvas);
-            if (strlen($bytes) <= self::MAX_BYTES) {
-                break;
-            }
-        }
+            $width = (int) round($width * 0.9);
+        } while (strlen($bytes) > self::MAX_BYTES && $width >= 640);
         imagedestroy($source);
 
-        return $bytes === '' ? $image : ['bytes' => $bytes, 'mime' => 'image/jpeg', 'extension' => 'jpg'];
+        return ['bytes' => $bytes, 'mime' => 'image/jpeg', 'extension' => 'jpg'];
     }
 
-    /** A $width-wide copy of $source with the logo bottom-right (about a fifth of the width). */
+    /**
+     * A $width-wide 16:9 copy of $source (centre crop, so Facebook shows the large link preview
+     * whatever shape the agent or model sent) with the logo bottom-right (about a fifth of the width).
+     */
     private static function watermarked(\GdImage $source, int $width): \GdImage
     {
-        $height = (int) round(imagesy($source) * $width / imagesx($source));
+        [$sourceWidth, $sourceHeight] = [imagesx($source), imagesy($source)];
+        $cropWidth = min($sourceWidth, (int) round($sourceHeight * 16 / 9));
+        $cropHeight = min($sourceHeight, (int) round($sourceWidth * 9 / 16));
+        $height = (int) round($width * 9 / 16);
         $canvas = imagecreatetruecolor($width, $height);
-        imagecopyresampled($canvas, $source, 0, 0, 0, 0, $width, $height, imagesx($source), imagesy($source));
+        imagecopyresampled($canvas, $source, 0, 0, intdiv($sourceWidth - $cropWidth, 2), intdiv($sourceHeight - $cropHeight, 2), $width, $height, $cropWidth, $cropHeight);
 
         $logo = @imagecreatefrompng(resource_path('images/watermark.png'));
         if ($logo !== false) {

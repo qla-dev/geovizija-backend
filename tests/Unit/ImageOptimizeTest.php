@@ -34,4 +34,26 @@ class ImageOptimizeTest extends TestCase
         }
         $this->assertGreaterThan(50, $bright);
     }
+
+    /** @return array<string, array{int, int, int, int}> */
+    public static function shapes(): array
+    {
+        return [
+            'portrait' => [900, 1400, 900, 506],
+            'square' => [1200, 1200, 1200, 675],
+            '4:3' => [1280, 960, 1280, 720],
+            'panorama' => [3000, 900, 1600, 900],
+            'small' => [500, 400, 500, 281],
+        ];
+    }
+
+    /** @dataProvider shapes */
+    public function test_any_shape_is_cropped_to_16_9(int $width, int $height, int $expectedWidth, int $expectedHeight): void
+    {
+        ob_start();
+        imagejpeg(imagecreatetruecolor($width, $height));
+        $jpeg = PostImageGenerator::toJpeg(['bytes' => (string) ob_get_clean(), 'mime' => 'image/jpeg', 'extension' => 'jpg']);
+
+        $this->assertSame([$expectedWidth, $expectedHeight], array_slice(getimagesizefromstring($jpeg['bytes']), 0, 2));
+    }
 }

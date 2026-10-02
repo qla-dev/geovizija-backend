@@ -95,10 +95,11 @@ class PostController extends Controller
     {
         abort_if($post->published_at === null, 404);
         $article = (new PostResource($post->load('category')))->resolve();
+        $size = PostImageGenerator::isGenerated($post->image_url) ? @getimagesize(public_path($post->image_url)) : false;
 
         return response()->json(['data' => array_intersect_key($article, array_flip(
             ['id', 'slug', 'title', 'excerpt', 'category', 'imageUrl', 'author', 'publishedAt'],
-        ))]);
+        )) + ['imageWidth' => $size[0] ?? null, 'imageHeight' => $size[1] ?? null]]);
     }
 
     /**
