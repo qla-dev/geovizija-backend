@@ -35,7 +35,8 @@ class InstagramStory
     {
         $path = self::DIRECTORY.'/'.$post->slug.'-'.now()->format('YmdHis').'.jpg';
         File::ensureDirectoryExists(public_path(self::DIRECTORY));
-        $this->card($post, 1080, 1920, 170, true, public_path($path));
+        // The text block ends as far from the bottom edge as it is from the left one (80 px).
+        $this->card($post, 1080, 1920, 80, true, public_path($path));
 
         return $path;
     }
