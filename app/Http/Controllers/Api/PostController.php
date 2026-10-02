@@ -152,11 +152,18 @@ class PostController extends Controller
     {
         abort_if($post->published_at === null, 404);
         $article = (new PostResource($post->load('category')))->resolve();
-        $size = PostImageGenerator::isGenerated($post->image_url) ? @getimagesize(public_path($post->image_url)) : false;
+        // The Facebook link image (title on the photo) when drawn, else the cover.
+        $share = PostImageGenerator::isGenerated($post->image_url) ? PostImageGenerator::sharePath($post->image_url) : null;
+        $image = $share && is_file(public_path($share)) ? $share : (PostImageGenerator::isGenerated($post->image_url) ? $post->image_url : null);
+        $size = $image ? @getimagesize(public_path($image)) : false;
 
         return response()->json(['data' => array_intersect_key($article, array_flip(
             ['id', 'slug', 'title', 'excerpt', 'category', 'imageUrl', 'author', 'publishedAt'],
-        )) + ['imageWidth' => $size[0] ?? null, 'imageHeight' => $size[1] ?? null]]);
+        )) + [
+            'shareImageUrl' => $image ? asset($image) : $article['imageUrl'],
+            'imageWidth' => $size[0] ?? null,
+            'imageHeight' => $size[1] ?? null,
+        ]]);
     }
 
     /**

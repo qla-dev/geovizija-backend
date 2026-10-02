@@ -53,7 +53,7 @@ class MetaShareTest extends TestCase
         $this->assertSame('123_456', $post->refresh()->meta_post_id);
         Http::assertSent(fn (Request $r) => $r->url() === self::FEED
             && $r['link'] === 'https://geovizija.com/article/berat-grad'
-            && $r['message'] === "Berat, grad hiljadu prozora\n\nKratki uvod."
+            && $r['message'] === 'Kratki uvod.'
             && $r['access_token'] === 'page-token'
             && ! isset($r['published']));
     }

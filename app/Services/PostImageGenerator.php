@@ -53,11 +53,12 @@ class PostImageGenerator
         $previous = $post->image_url;
         $post->update(['image_url' => $path]);
 
-        // The Instagram feed version (InstagramStory::feed), drawn again when the article is posted.
+        // The Instagram feed and Facebook link images (InstagramStory), drawn again when shared.
         try {
             app(InstagramStory::class)->feed($post);
+            app(InstagramStory::class)->facebook($post);
         } catch (\Throwable $exception) {
-            Log::warning("Instagram image for post {$post->id} not drawn: {$exception->getMessage()}");
+            Log::warning("Social images for post {$post->id} not drawn: {$exception->getMessage()}");
         }
 
         // Remove the image this one replaces, but only if it was one of ours.
@@ -367,10 +368,16 @@ class PostImageGenerator
         return preg_replace('/\.\w+$/', '-ig.jpg', $path);
     }
 
-    /** Deletes a saved cover with its Instagram version and original. */
+    /** media/posts/x-...-w3.jpg → media/posts/x-...-w3-fb.jpg: the Facebook link image of a cover. */
+    public static function sharePath(string $path): string
+    {
+        return preg_replace('/\.\w+$/', '-fb.jpg', $path);
+    }
+
+    /** Deletes a saved cover with its Instagram and Facebook versions and original. */
     private static function deleteCover(string $path): void
     {
-        File::delete([public_path($path), public_path(self::portraitPath($path)), self::originalPath($path)]);
+        File::delete([public_path($path), public_path(self::portraitPath($path)), public_path(self::sharePath($path)), self::originalPath($path)]);
     }
 
     private function inlinePrompt(Post $post, string $description): string

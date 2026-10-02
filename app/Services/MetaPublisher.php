@@ -66,7 +66,15 @@ class MetaPublisher
             $params['scheduled_publish_time'] = $scheduledFor->getTimestamp();
         }
 
-        // Facebook keeps a link's preview for weeks; re-read it so a new cover or title shows.
+        // The link image with the current title, then let Facebook re-read the preview (it keeps one
+        // for weeks) so a new cover or title shows.
+        if (PostImageGenerator::isGenerated($post->image_url)) {
+            try {
+                app(InstagramStory::class)->facebook($post);
+            } catch (Throwable $exception) {
+                Log::warning("Facebook image for post {$post->id} not drawn: {$exception->getMessage()}");
+            }
+        }
         try {
             Http::asForm()->timeout(20)->post($this->graph(''), ['id' => $params['link'], 'scrape' => 'true', 'access_token' => $params['access_token']]);
         } catch (Throwable) {
@@ -109,9 +117,10 @@ class MetaPublisher
         return rtrim((string) config('services.meta.site_url'), '/').'/article/'.rawurlencode($post->slug);
     }
 
+    /** The excerpt only: the title is already on the link image (InstagramStory::facebook) under it. */
     private function message(Post $post): string
     {
-        return trim($post->title."\n\n".$post->excerpt);
+        return trim((string) $post->excerpt) ?: $post->title;
     }
 
     private function endpoint(): string
