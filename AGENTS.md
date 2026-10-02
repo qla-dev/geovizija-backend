@@ -40,6 +40,16 @@ Each generation is a paid OpenRouter call.
 
 Generated text can contain inaccurate specifics; the prompt forbids invented quotes and statistics, but review before relying on figures. The original short texts remain in `database/seeders/data/posts.json`.
 
+# Facebook sharing
+
+`App\Services\MetaPublisher` shares each new article on the Geovizija Facebook Page through the Graph API (`/{page}/feed`). It is off until `META_PAGE_ID` and `META_PAGE_TOKEN` (a long-lived Page access token with `pages_manage_posts` and `pages_read_engagement`) are set in the server `.env`, then `config:cache` (the backend redeploy does it).
+
+- Hooks: `/api/publish` (after the images) and admin `POST /api/posts`. Edits are not re-shared. `shareToMeta: false` in the publish JSON opts out.
+- Scheduled articles become scheduled Page posts (Business Suite Planner), so no cron or queue is needed. Facebook accepts 10 minutes to 30 days ahead.
+- Posts link to `SITE_URL/endpoints/share/{slug}` (`ShareController`, `resources/views/share.blade.php`): Open Graph tags for the preview, then a redirect to `#/article/{id}`. The site's own hash URLs cannot be previewed by Facebook.
+- `posts.meta_post_id` prevents double posting; `posts.meta_error` keeps the last failure. Retry: `POST /api/posts/{id}/share-meta[?force=1]` (admin) or `php artisan posts:share-meta {ids...} [--force]` (writes to the database `.env` points at).
+- A failure is logged and returned as `facebook.status = failed`; it never blocks publishing.
+
 # Database safety — mandatory
 
 `.env` may point at the live production database (`tagnetba_geovizija` on the remote host). Never assume a command is safe because of an environment name.

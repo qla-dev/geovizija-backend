@@ -51,6 +51,15 @@ return [
         'token' => env('ADMIN_API_TOKEN'),
     ],
 
+    // Facebook Page sharing of new articles (App\Services\MetaPublisher); off until both are set.
+    // META_PAGE_TOKEN is a long-lived Page access token with pages_manage_posts.
+    'meta' => [
+        'page_id' => env('META_PAGE_ID'),
+        'page_token' => env('META_PAGE_TOKEN'),
+        'graph_version' => env('META_GRAPH_VERSION', 'v23.0'),
+        'site_url' => env('SITE_URL', 'https://geovizija.com'),
+    ],
+
     'openrouter' => [
         'api_key' => env('OPENROUTER_API_KEY'),
         'model' => env('OPENROUTER_MODEL', 'google/gemini-2.5-flash'),

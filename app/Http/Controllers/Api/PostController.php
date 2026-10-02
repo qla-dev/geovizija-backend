@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\PostResource;
 use App\Models\Category;
 use App\Models\Post;
+use App\Services\MetaPublisher;
 use App\Services\PostContentGenerator;
 use App\Services\PostImageGenerator;
 use Illuminate\Http\Request;
@@ -55,8 +56,17 @@ class PostController extends Controller
         $data['read_time'] ??=max(1, (int) ceil(str_word_count(strip_tags($data['content'])) / 200));
 
         $post = Post::create($data);
+        $facebook = app(MetaPublisher::class)->share($post);
 
-        return (new PostResource($post->load('category')))->response()->setStatusCode(201);
+        return (new PostResource($post->load('category')))->additional(['facebook' => $facebook])->response()->setStatusCode(201);
+    }
+
+    /** Shares (or with ?force=1 re-shares) an article on the Facebook Page; for retries and older articles. */
+    public function shareToMeta(Request $request, Post $post, MetaPublisher $meta)
+    {
+        $result = $meta->share($post, $request->boolean('force'));
+
+        return response()->json($result, $result['status'] === 'failed' ? 502 : 200);
     }
 
     public function update(Request $request, Post $post)

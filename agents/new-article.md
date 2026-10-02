@@ -19,7 +19,7 @@ Goal: a short magazine article with a cover image and two in-text images, publis
    }
    ```
 
-   The response `data.id` is the post id. `author` defaults to "Kulašin"; `read_time` is computed.
+   The response `data.id` is the post id. `author` defaults to "Kulašin"; `read_time` is computed. The post is shared on the Facebook Page right away (see `facebook` in the response) — before steps 4–5 draw the images, so prefer `/publish` (README.md), which shares after the images; or call `POST /posts/{id}/share-meta?force=1` once the cover exists.
 4. `POST /posts/{id}/generate-image` — draws the cover (~20 s).
 5. `POST /posts/{id}/generate-inline-image` — draws the next `[[SLIKA: …]]` image. Call it again until the response shows `"pending": 0` (two calls for two markers).
 6. Publish: `PATCH /posts/{id}` with `{"published_at": "<now, ISO 8601>"}`.

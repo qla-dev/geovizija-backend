@@ -62,6 +62,8 @@ Admin (`Authorization: Bearer <ADMIN_API_TOKEN>`):
 | DELETE | `/api/comments/{id}` | removes a comment and its replies |
 | POST / PATCH / DELETE | `/api/posts[/{id or slug}]` | `category (slug), title, slug?, excerpt, content, image_url, author, read_time?, featured, published_at` |
 
+`POST /api/posts/{id or slug}/share-meta` (admin, `?force=1` to share again) shares the article on the Facebook Page; new articles from `/api/publish` and `POST /api/posts` are shared automatically. See AGENTS.md (Facebook sharing).
+
 `POST /api/posts/{id or slug}/generate-image` (admin) generates a new cover through OpenRouter and returns the updated post.
 
 A post is public once `published_at` is set and not in the future. Deleting a category that still has posts returns 409.

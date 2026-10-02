@@ -8,6 +8,7 @@ use App\Models\Category;
 use App\Models\Post;
 use App\Models\Quiz;
 use App\Services\PostContentGenerator;
+use App\Services\MetaPublisher;
 use App\Services\PostImageGenerator;
 use App\Services\QuizGenerator;
 use Illuminate\Http\Request;
@@ -59,6 +60,8 @@ class PublishController extends Controller
             'cover' => ['nullable', 'string'],
             'inlineImages' => ['nullable', 'array', 'max:2'],
             'inlineImages.*' => ['nullable', 'string'],
+            // false keeps the article off the Facebook Page (default: shared once images are done).
+            'shareToMeta' => ['nullable', 'boolean'],
         ]);
         $publishAt = Carbon::parse($data['publishedAt'] ?? $data['published_at'] ?? 'now');
 
@@ -114,6 +117,11 @@ class PublishController extends Controller
             $place(fn (?string $src) => $images->generateNextInline($post, $src), $inline[$i] ?? null, 'Slika u tekstu '.($i + 1));
         }
 
+        // After the images, so the Facebook preview has the cover. Never fails the publish.
+        $facebook = ($data['shareToMeta'] ?? true)
+            ? app(MetaPublisher::class)->share($post->refresh())
+            : ['status' => 'skipped', 'message' => 'shareToMeta: false'];
+
         return response()->json([
             'message' => $publishAt->isFuture()
                 ? 'Članak je zakazan za '.$publishAt->copy()->setTimezone(QuizGenerator::TIMEZONE)->format('d.m.Y. H:i').' (Sarajevo).'
@@ -123,6 +131,7 @@ class PublishController extends Controller
             'url' => "https://geovizija.com/#/article/{$post->id}",
             'warnings' => $warnings,
             'images' => $sources,
+            'facebook' => $facebook,
             'data' => new PostResource($post->refresh()->load('category')),
         ], 201);
     }
