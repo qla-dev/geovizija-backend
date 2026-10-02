@@ -95,7 +95,7 @@ class InstagramPublisher
     }
 
     /** Publishes the article's story (see InstagramStory); returns null or why it failed. */
-    private function story(Post $post): ?string
+    public function story(Post $post): ?string
     {
         try {
             $path = app(InstagramStory::class)->make($post);

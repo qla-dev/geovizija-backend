@@ -79,6 +79,15 @@ class PostController extends Controller
      */
     public function shareToInstagram(Request $request, Post $post, InstagramPublisher $instagram)
     {
+        // ?only=story: just the story, e.g. when it failed after the post went out.
+        if ($request->query('only') === 'story') {
+            $error = InstagramPublisher::configured() ? $instagram->story($post) : 'Instagram nije povezan.';
+
+            return response()->json($error === null
+                ? ['status' => 'posted', 'message' => 'Story je objavljen.']
+                : ['status' => 'failed', 'message' => $error], $error === null ? 200 : 502);
+        }
+
         $result = $instagram->publish($post, $request->boolean('force'));
         if ($result['status'] === 'pending') {
             InstagramPublisher::queue($post);

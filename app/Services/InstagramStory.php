@@ -83,11 +83,21 @@ class InstagramStory
         for ($i = 0; $i < 25; $i++) {
             imagefilter($small, IMG_FILTER_GAUSSIAN_BLUR);
         }
-        imagesetinterpolation($small, IMG_BICUBIC);
-        $large = imagescale($small, self::WIDTH, self::HEIGHT, IMG_BICUBIC);
-        imagecopy($story, $large, 0, 0, 0, 0, self::WIDTH, self::HEIGHT);
+        // Doubling in steps (blurring each one) keeps it smooth; one big resample turns into blocks.
+        foreach ([2, 4] as $factor) {
+            $next = imagecreatetruecolor(135 * $factor, 240 * $factor);
+            imagecopyresampled($next, $small, 0, 0, 0, 0, 135 * $factor, 240 * $factor, imagesx($small), imagesy($small));
+            imagedestroy($small);
+            $small = $next;
+            for ($i = 0; $i < 4; $i++) {
+                imagefilter($small, IMG_FILTER_GAUSSIAN_BLUR);
+            }
+        }
+        imagecopyresampled($story, $small, 0, 0, 0, 0, self::WIDTH, self::HEIGHT, imagesx($small), imagesy($small));
         imagedestroy($small);
-        imagedestroy($large);
+        for ($i = 0; $i < 3; $i++) {
+            imagefilter($story, IMG_FILTER_GAUSSIAN_BLUR);
+        }
         imagealphablending($story, true);
         imagefilledrectangle($story, 0, 0, self::WIDTH, self::HEIGHT, imagecolorallocatealpha($story, 0, 0, 0, 50));
     }
