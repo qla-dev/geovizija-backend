@@ -67,6 +67,29 @@ class InstagramTest extends TestCase
         Http::assertSent(fn (Request $r) => $r->url() === self::PUBLISH && $r['creation_id'] === 'c1');
     }
 
+    public function test_post_is_followed_by_a_full_screen_story(): void
+    {
+        Http::fake([
+            self::MEDIA => Http::response(['id' => 'c1']),
+            'graph.facebook.com/v23.0/c1*' => Http::response(['status_code' => 'FINISHED']),
+            self::PUBLISH => Http::response(['id' => 'm1']),
+        ]);
+        \Illuminate\Support\Facades\File::ensureDirectoryExists(public_path('media/posts'));
+        imagejpeg(imagecreatetruecolor(1600, 900), public_path('media/posts/story-test-w3.jpg'));
+        $post = $this->article(['image_url' => 'media/posts/story-test-w3.jpg']);
+
+        $this->artisan('instagram:publish-due')->assertSuccessful();
+
+        $this->assertSame('posted', $post->refresh()->ig_status);
+        $this->assertNull($post->ig_error);
+        $story = Http::recorded(fn (Request $r) => $r->url() === self::MEDIA && ($r->data()['media_type'] ?? null) === 'STORIES')->first()[0];
+        $this->assertMatchesRegularExpression('#/media/stories/una-\d{14}\.jpg$#', $story['image_url']);
+        $this->assertCount(2, Http::recorded(fn (Request $r) => $r->url() === self::PUBLISH));
+        $this->assertSame([], glob(public_path('media/stories/una-*.jpg')));
+
+        \Illuminate\Support\Facades\File::delete(public_path('media/posts/story-test-w3.jpg'));
+    }
+
     public function test_scheduled_unqueued_and_skipped_articles_wait(): void
     {
         $this->fakeInstagram();
