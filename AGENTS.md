@@ -23,7 +23,7 @@ Keep `agents/*.md` in sync when changing the endpoints, validation or body forma
 
 # Post images
 
-`App\Services\PostImageGenerator` draws 16:9 cover images through OpenRouter (`OPENROUTER_IMAGE_MODEL`, default `google/gemini-2.5-flash-image`), saves them as JPEG in `public/media/posts` (gitignored, lives only on the server) and stores the relative path in `posts.image_url`; `PostResource` makes it absolute.
+`App\Services\PostImageGenerator` draws 16:9 cover images through OpenRouter (`OPENROUTER_IMAGE_MODEL`, default `google/gemini-2.5-flash-image`), saves them as JPEG in `public/media/posts` (every saved image, drawn or supplied by the agent, goes through `toJpeg()`: at most 1600 px wide, `resources/images/watermark.png` (the header logo) in the bottom-right corner, progressive JPEG at the highest quality that fits 100 KB, made smaller only below quality 42) (gitignored, lives only on the server) and stores the relative path in `posts.image_url`; `PostResource` makes it absolute.
 
 - On the server: `POST https://geovizija.com/endpoints/api/posts/{id}/generate-image` with `Authorization: Bearer <ADMIN_API_TOKEN>`
 - CLI: `php artisan posts:generate-images [ids...] [--force]` — writes files to the machine it runs on, so running it locally against the production DB points posts at images that do not exist on the server.

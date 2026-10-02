@@ -27,6 +27,13 @@ class PostImageGenerator
     /** Largest image accepted from an outside source (data URL or https link). */
     public const MAX_SOURCE_BYTES = 8 * 1024 * 1024;
 
+    /** Saved images (see toJpeg): width limit, size limit, lowest JPEG quality before shrinking. */
+    private const MAX_WIDTH = 1600;
+
+    private const MAX_BYTES = 100 * 1000;
+
+    private const QUALITY_FLOOR = 42;
+
     /**
      * Stores the cover image as the post's image_url: the supplied $source (data URL or https
      * link) when given, otherwise one drawn through OpenRouter.
@@ -262,14 +269,16 @@ class PostImageGenerator
     }
 
     /**
-     * Re-encodes the (multi-megabyte PNG) model output as a JPEG when GD is available.
+     * Every saved image (drawn or supplied): at most MAX_WIDTH wide, the Geovizija logo in the
+     * bottom-right corner, and a progressive JPEG at the highest quality that fits MAX_BYTES
+     * (smaller sizes only when even QUALITY_FLOOR does not fit). Without GD the image is kept as is.
      *
      * @param  array{bytes: string, mime: string, extension: string}  $image
      * @return array{bytes: string, mime: string, extension: string}
      */
-    private static function toJpeg(array $image): array
+    public static function toJpeg(array $image): array
     {
-        if ($image['extension'] === 'jpg' || ! function_exists('imagecreatefromstring')) {
+        if (! function_exists('imagecreatefromstring')) {
             return $image;
         }
 
@@ -278,12 +287,63 @@ class PostImageGenerator
             return $image;
         }
 
-        ob_start();
-        imagejpeg($source, null, 85);
-        $bytes = (string) ob_get_clean();
+        $bytes = '';
+        for ($width = min(imagesx($source), self::MAX_WIDTH); $width >= 640; $width = (int) round($width * 0.9)) {
+            $canvas = self::watermarked($source, $width);
+            $bytes = self::bestJpeg($canvas);
+            imagedestroy($canvas);
+            if (strlen($bytes) <= self::MAX_BYTES) {
+                break;
+            }
+        }
         imagedestroy($source);
 
         return $bytes === '' ? $image : ['bytes' => $bytes, 'mime' => 'image/jpeg', 'extension' => 'jpg'];
+    }
+
+    /** A $width-wide copy of $source with the logo bottom-right (about a fifth of the width). */
+    private static function watermarked(\GdImage $source, int $width): \GdImage
+    {
+        $height = (int) round(imagesy($source) * $width / imagesx($source));
+        $canvas = imagecreatetruecolor($width, $height);
+        imagecopyresampled($canvas, $source, 0, 0, 0, 0, $width, $height, imagesx($source), imagesy($source));
+
+        $logo = @imagecreatefrompng(resource_path('images/watermark.png'));
+        if ($logo !== false) {
+            $logoWidth = (int) round(max(150, $width * 0.2));
+            $logoHeight = (int) round(imagesy($logo) * $logoWidth / imagesx($logo));
+            $margin = (int) round($width * 0.012);
+            imagealphablending($canvas, true);
+            imagecopyresampled($canvas, $logo, $width - $logoWidth - $margin, $height - $logoHeight - $margin, 0, 0, $logoWidth, $logoHeight, imagesx($logo), imagesy($logo));
+            imagedestroy($logo);
+        }
+
+        return $canvas;
+    }
+
+    /** Highest JPEG quality (binary search, QUALITY_FLOOR..90) whose output fits MAX_BYTES, else the floor. */
+    private static function bestJpeg(\GdImage $canvas): string
+    {
+        imageinterlace($canvas, true);
+        $encode = function (int $quality) use ($canvas): string {
+            ob_start();
+            imagejpeg($canvas, null, $quality);
+
+            return (string) ob_get_clean();
+        };
+
+        $best = $encode(self::QUALITY_FLOOR);
+        for ($low = self::QUALITY_FLOOR + 1, $high = 90; $low <= $high;) {
+            $quality = intdiv($low + $high, 2);
+            $bytes = $encode($quality);
+            if (strlen($bytes) <= self::MAX_BYTES) {
+                [$best, $low] = [$bytes, $quality + 1];
+            } else {
+                $high = $quality - 1;
+            }
+        }
+
+        return $best;
     }
 
     /** @return array{bytes: string, mime: string, extension: string}|null */
