@@ -22,6 +22,14 @@ class InstagramStory
 
     private const GREEN = [16, 185, 129];
 
+    /** The site's category colours (Tailwind classes in categories.color) as RGB, for the category label. */
+    private const CATEGORY_COLORS = [
+        'bg-emerald-600' => [5, 150, 105], 'bg-teal-600' => [13, 148, 136], 'bg-blue-600' => [37, 99, 235],
+        'bg-cyan-600' => [8, 145, 178], 'bg-purple-600' => [147, 51, 234], 'bg-orange-600' => [234, 88, 12],
+        'bg-yellow-500' => [234, 179, 8], 'bg-indigo-600' => [79, 70, 229], 'bg-green-500' => [34, 197, 94],
+        'bg-red-600' => [220, 38, 38], 'bg-rose-600' => [225, 29, 72], 'bg-stone-500' => [120, 113, 108],
+    ];
+
     /** The story; returns the relative path of the saved JPEG. */
     public function make(Post $post): string
     {
@@ -32,11 +40,14 @@ class InstagramStory
         return $path;
     }
 
-    /** The 4:5 feed image, saved next to the cover (PostImageGenerator::portraitPath). */
+    /**
+     * The 4:5 feed image, saved next to the cover (PostImageGenerator::portraitPath). Its text sits at
+     * the top (90 px from the edge) under a shade from the top, clear of Instagram's overlays below.
+     */
     public function feed(Post $post): string
     {
         $path = PostImageGenerator::portraitPath($post->image_url);
-        $this->card($post, 1080, 1350, 110, false, public_path($path));
+        $this->card($post, 1080, 1350, 90, false, public_path($path), shadeFrom: 320, atTop: true);
 
         return $path;
     }
@@ -53,8 +64,11 @@ class InstagramStory
         return $path;
     }
 
-    /** $scale sizes the text and logo; $shadeFrom is how far above the text block the shade starts. */
-    private function card(Post $post, int $width, int $height, int $bottom, bool $readOn, string $file, float $scale = 1, int $maxLines = 4, int $shadeFrom = 700): void
+    /**
+     * $edge is the text block's distance from the bottom (or, with $atTop, from the top) edge; $scale
+     * sizes the text and logo; $shadeFrom is how far beyond the text block the shade reaches.
+     */
+    private function card(Post $post, int $width, int $height, int $edge, bool $readOn, string $file, float $scale = 1, int $maxLines = 4, int $shadeFrom = 700, bool $atTop = false): void
     {
         // From the cover's original when kept: a portrait crop of the published 16:9 cover is too small.
         $cover = $post->image_url && PostImageGenerator::isGenerated($post->image_url)
@@ -70,12 +84,16 @@ class InstagramStory
         $black = $this->font('Black');
         $regular = $this->font('Regular');
 
-        // Text laid out upwards from $bottom, then drawn over the background, whose shade starts
-        // above the text block wherever it ends up.
+        // Text laid out upwards from the last baseline, then drawn over the background, whose shade
+        // reaches $shadeFrom beyond the text block wherever it ends up.
         $left = (int) round(80 * $scale);
         $px = fn (float $value) => (int) round($value * $scale);
         $draw = [];
-        $baseline = $height - $bottom;
+        $lines = $this->wrap($post->title, $black, $px(46), $width - 2 * $left, $maxLines);
+        // At the top: the last baseline follows from the logo row starting $edge from the top edge.
+        $baseline = $atTop
+            ? $edge + $px(48) + $px(84) + (count($lines) - 1) * $px(84) + ($readOn ? 172 : 0)
+            : $height - $edge;
         if ($readOn) {
             $at = $baseline;
             $draw[] = fn () => imagettftext($image, 26, 0, $left, $at, $green, $black, 'LINK U OPISU PROFILA');
@@ -83,7 +101,6 @@ class InstagramStory
             $baseline -= 172;
         }
 
-        $lines = $this->wrap($post->title, $black, $px(46), $width - 2 * $left, $maxLines);
         $titleTop = $baseline - (count($lines) - 1) * $px(84);
         $draw[] = function () use ($image, $lines, $left, $titleTop, $white, $black, $px) {
             foreach ($lines as $i => $line) {
@@ -96,12 +113,25 @@ class InstagramStory
         $draw[] = fn () => $this->logo($image, $left, $logoTop, $white, $green, $black, $scale);
         $post->loadMissing('category');
         if ($post->category) {
+            // A label in the category's colour with white text, like the site's category pills,
+            // vertically centred on the logo row and ending at the right margin.
             $category = mb_strtoupper($post->category->name);
-            $box = imagettfbbox($px(22), 0, $black, $category);
-            $draw[] = fn () => imagettftext($image, $px(22), 0, $width - $left - ($box[2] - $box[0]), $logoTop + $px(36), $green, $black, $category);
+            $box = imagettfbbox($px(20), 0, $black, $category);
+            [$textWidth, $capHeight] = [$box[2] - $box[0], $box[1] - $box[7]];
+            [$padX, $padY] = [$px(16), $px(12)];
+            $pillRight = $width - $left;
+            $pillLeft = $pillRight - $textWidth - 2 * $padX;
+            $pillTop = $logoTop + intdiv($px(48) - ($capHeight + 2 * $padY), 2);
+            $fill = imagecolorallocate($image, ...(self::CATEGORY_COLORS[$post->category->color] ?? self::GREEN));
+            $draw[] = function () use ($image, $pillLeft, $pillTop, $pillRight, $capHeight, $padX, $padY, $fill, $white, $black, $category, $px) {
+                imagefilledrectangle($image, $pillLeft, $pillTop, $pillRight, $pillTop + $capHeight + 2 * $padY, $fill);
+                imagettftext($image, $px(20), 0, $pillLeft + $padX, $pillTop + $padY + $capHeight, $white, $black, $category);
+            };
         }
 
-        $this->background($image, $cover, $logoTop - $shadeFrom);
+        $atTop
+            ? $this->background($image, $cover, $baseline + $px(40) + $shadeFrom, true)
+            : $this->background($image, $cover, $logoTop - $shadeFrom);
         foreach ($draw as $step) {
             $step();
         }
@@ -114,9 +144,10 @@ class InstagramStory
 
     /**
      * The cover filling the frame (centre crop, sharp), with a shade that grows steadily (faster at first)
-     * from $shadeTop to about 92 % black at the bottom edge, so the text reads on any photo.
+     * from $shadeTop to about 92 % black at the bottom edge (with $fromTop: from $shadeTop up to the top
+     * edge), so the text reads on any photo.
      */
-    private function background(\GdImage $image, \GdImage $cover, int $shadeTop): void
+    private function background(\GdImage $image, \GdImage $cover, int $shadeTop, bool $fromTop = false): void
     {
         [$width, $height] = [imagesx($image), imagesy($image)];
         $cropWidth = min(imagesx($cover), (int) round(imagesy($cover) * $width / $height));
@@ -124,10 +155,18 @@ class InstagramStory
         imagecopyresampled($image, $cover, 0, 0, intdiv(imagesx($cover) - $cropWidth, 2), intdiv(imagesy($cover) - $cropHeight, 2), $width, $height, $cropWidth, $cropHeight);
 
         imagealphablending($image, true);
+        $alpha = fn (float $shade) => imagecolorallocatealpha($image, 0, 0, 0, (int) round(127 - 120 * $shade ** 0.6 * min(1, $shade / 0.25)));
+        if ($fromTop) {
+            $to = min($height, $shadeTop);
+            for ($y = 0; $y < $to; $y += 2) {
+                imagefilledrectangle($image, 0, $y, $width, $y + 1, $alpha(($to - $y) / $to));
+            }
+
+            return;
+        }
         $from = max(0, $shadeTop);
         for ($y = $from; $y < $height; $y += 2) {
-            $shade = ($y - $from) / ($height - $from);
-            imagefilledrectangle($image, 0, $y, $width, $y + 1, imagecolorallocatealpha($image, 0, 0, 0, (int) round(127 - 120 * $shade ** 0.6 * min(1, $shade / 0.25))));
+            imagefilledrectangle($image, 0, $y, $width, $y + 1, $alpha(($y - $from) / ($height - $from)));
         }
     }
 
