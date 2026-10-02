@@ -199,13 +199,14 @@ class InstagramPublisher
         ]);
     }
 
-    /** The cover's 4:5 version (made now for covers saved before it existed), else the cover itself. */
+    /** The 4:5 feed image (InstagramStory::feed), drawn now with the current title; else the cover itself. */
     private function feedImage(Post $post): string
     {
         if (PostImageGenerator::isGenerated($post->image_url)) {
-            $portrait = PostImageGenerator::portraitPath($post->image_url);
-            if (File::exists(public_path($portrait)) || PostImageGenerator::makePortrait($post->image_url)) {
-                return asset($portrait);
+            try {
+                return asset(app(InstagramStory::class)->feed($post));
+            } catch (Throwable $exception) {
+                Log::warning("Instagram image for post {$post->id} not drawn: {$exception->getMessage()}");
             }
         }
 

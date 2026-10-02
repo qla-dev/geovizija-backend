@@ -50,10 +50,15 @@ class PostImageGenerator
             ? $this->save($this->fetchSource($source), $post->slug)
             : $this->draw($this->prompt($post), $post->slug, $post->id);
 
-        self::makePortrait($path);
-
         $previous = $post->image_url;
         $post->update(['image_url' => $path]);
+
+        // The Instagram feed version (InstagramStory::feed), drawn again when the article is posted.
+        try {
+            app(InstagramStory::class)->feed($post);
+        } catch (\Throwable $exception) {
+            Log::warning("Instagram image for post {$post->id} not drawn: {$exception->getMessage()}");
+        }
 
         // Remove the image this one replaces, but only if it was one of ours.
         if ($previous && str_starts_with($previous, self::DIRECTORY.'/') && $previous !== $path) {
@@ -362,26 +367,6 @@ class PostImageGenerator
         return preg_replace('/\.\w+$/', '-ig.jpg', $path);
     }
 
-    /**
-     * The Instagram feed version of a cover: 4:5 (1080 x 1350 when the original is large enough),
-     * from the original, with the logo in the same places as the landscape version.
-     */
-    public static function makePortrait(string $path): ?string
-    {
-        $source = self::sourceImage($path);
-        if ($source === false) {
-            return null;
-        }
-        $width = min(1080, imagesx($source), (int) round(imagesy($source) * 4 / 5));
-        $canvas = self::watermarked($source, $width, 4 / 5);
-        imageinterlace($canvas, true);
-        imagejpeg($canvas, public_path(self::portraitPath($path)), 90);
-        imagedestroy($canvas);
-        imagedestroy($source);
-
-        return self::portraitPath($path);
-    }
-
     /** Deletes a saved cover with its Instagram version and original. */
     private static function deleteCover(string $path): void
     {
@@ -447,7 +432,7 @@ class PostImageGenerator
 
     /**
      * A $width-wide copy of $source at $ratio (centre crop; 16:9 so Facebook shows the large link
-     * preview whatever shape the agent or model sent, 4:5 for the Instagram feed) with the logo like news photo agencies: green frame
+     * preview whatever shape the agent or model sent) with the logo like news photo agencies: green frame
      * top-left, GEOVIZIJA top-right, semi-transparent.
      */
     private static function watermarked(\GdImage $source, int $width, float $ratio = 16 / 9): \GdImage
