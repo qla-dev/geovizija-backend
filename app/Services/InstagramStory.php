@@ -13,7 +13,7 @@ use RuntimeException;
  *  - story (1080x1920): also "Cijeli članak na geovizija.com / LINK U OPISU PROFILA" (the API cannot
  *    add link stickers), kept above Instagram's reply bar; saved under public/media/stories.
  *  - feed (1080x1350, 4:5): without those two lines; saved as the cover's -ig.jpg.
- *  - facebook (1080x1080, square): like feed, title in at most 3 lines; saved as the cover's -fb.jpg (og:image).
+ *  - facebook (1080x1080, square): like feed, title in at most 3 lines; saved as the cover's -fbsq.jpg (og:image).
  * Fonts: Merriweather (OFL) in resources/fonts.
  */
 class InstagramStory

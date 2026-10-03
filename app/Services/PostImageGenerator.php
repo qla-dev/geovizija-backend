@@ -326,10 +326,10 @@ class PostImageGenerator
         return preg_replace('/\.\w+$/', '-ig.jpg', $path);
     }
 
-    /** media/posts/x-...-w3.jpg → media/posts/x-...-w3-fb.jpg: the Facebook link image of a cover. */
+    /** media/posts/x-...-w3.jpg → media/posts/x-...-w3-fbsq.jpg: the square Facebook link image of a cover (a new name, so Facebook does not reuse the old landscape one it cached). */
     public static function sharePath(string $path): string
     {
-        return preg_replace('/\.\w+$/', '-fb.jpg', $path);
+        return preg_replace('/\.\w+$/', '-fbsq.jpg', $path);
     }
 
     /** Deletes a saved cover with its Instagram and Facebook versions and original. */
