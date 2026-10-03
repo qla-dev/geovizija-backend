@@ -146,7 +146,7 @@ class InstagramPublisher
         }
 
         try {
-            $container = $this->container(['image_url' => asset($path), 'media_type' => 'STORIES']);
+            $container = $this->container(['image_url' => self::publicUrl($path), 'media_type' => 'STORIES']);
             if (isset($container['error'])) {
                 return $container['error'];
             }
@@ -209,13 +209,19 @@ class InstagramPublisher
                 // request could not be fetched by Instagram: "Only photo or video can be accepted".)
                 $saved = app(InstagramStory::class)->feed($post);
 
-                return asset($saved).'?v='.now()->format('YmdHis');
+                return self::publicUrl($saved).'?v='.now()->format('YmdHis');
             } catch (Throwable $exception) {
                 Log::warning("Instagram image for post {$post->id} not drawn: {$exception->getMessage()}");
             }
         }
 
-        return (new PostResource($post))->resolve()['imageUrl'];
+        return PostImageGenerator::isGenerated($post->image_url) ? self::publicUrl($post->image_url) : $post->image_url;
+    }
+
+    /** Absolute public URL of a file under public/ (services.meta.media_url, the same from web and cron). */
+    public static function publicUrl(string $path): string
+    {
+        return rtrim((string) config('services.meta.media_url'), '/').'/'.ltrim($path, '/');
     }
 
     /** Title, excerpt, where to read on (captions have no links) and a few hashtags. */

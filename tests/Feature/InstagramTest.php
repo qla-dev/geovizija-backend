@@ -61,7 +61,7 @@ class InstagramTest extends TestCase
         $post->refresh();
         $this->assertSame(['posted', 'm1'], [$post->ig_status, $post->ig_media_id]);
         Http::assertSent(fn (Request $r) => $r->url() === self::MEDIA
-            && $r['image_url'] === asset('media/posts/una-wm.jpg')
+            && $r['image_url'] === 'https://geovizija.com/endpoints/media/posts/una-wm.jpg'
             && str_starts_with($r['caption'], "Una, rijeka smaragdne boje\n\nKratki uvod.")
             && str_contains($r['caption'], '#geovizija #priroda'));
         Http::assertSent(fn (Request $r) => $r->url() === self::PUBLISH && $r['creation_id'] === 'c1');

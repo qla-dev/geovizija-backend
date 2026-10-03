@@ -65,6 +65,9 @@ return [
         'ig_story_gap_minutes' => (int) env('META_IG_STORY_GAP_MINUTES', 45),
         'graph_version' => env('META_GRAPH_VERSION', 'v23.0'),
         'site_url' => env('SITE_URL', 'https://geovizija.com'),
+        // Public base of this backend's files (public/), for links handed to Instagram. Not asset():
+        // under the cron (CLI) that follows APP_URL, which Instagram could not fetch from.
+        'media_url' => env('MEDIA_URL', rtrim((string) env('SITE_URL', 'https://geovizija.com'), '/').'/endpoints'),
     ],
 
     'openrouter' => [
