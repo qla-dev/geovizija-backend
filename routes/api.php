@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AdminController;
 use App\Http\Controllers\Api\AgentController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CommentController;
@@ -7,6 +8,7 @@ use App\Http\Controllers\Api\InstagramController;
 use App\Http\Controllers\Api\PostController;
 use App\Http\Controllers\Api\PublishController;
 use App\Http\Controllers\Api\QuizController;
+use App\Http\Controllers\Api\TrackController;
 use App\Http\Middleware\EnsureAdminToken;
 use Illuminate\Support\Facades\Route;
 
@@ -23,6 +25,10 @@ Route::get('/quizzes/{date}', [QuizController::class, 'show']);
 // Paste-and-publish for Claude-written JSON; guarded by the secret inside the JSON, rate limited.
 Route::post('/publish', PublishController::class)->middleware('throttle:10,1');
 
+// Page view beacon (admin statistics) and the admin panel login.
+Route::post('/track', [TrackController::class, 'store'])->middleware('throttle:120,1');
+Route::post('/admin/login', [AdminController::class, 'login'])->middleware('throttle:10,1');
+
 // Anonymous comments; rate limited per IP.
 Route::post('/posts/{post}/comments', [CommentController::class, 'store'])->middleware('throttle:5,1');
 Route::post('/comments/{comment}/like', [CommentController::class, 'like'])->middleware('throttle:30,1');
@@ -37,6 +43,13 @@ Route::middleware(EnsureAdminToken::class)->group(function () {
     Route::post('/posts/{post}/share-meta', [PostController::class, 'shareToMeta']);
     Route::post('/posts/{post}/share-instagram', [PostController::class, 'shareToInstagram']);
     Route::get('/instagram/status', [InstagramController::class, 'status']);
+    Route::get('/admin/posts', [AdminController::class, 'posts']);
+    Route::get('/admin/posts/{post}', [AdminController::class, 'post']);
+    Route::get('/admin/stats', [AdminController::class, 'stats']);
+    Route::get('/admin/suggestions', [AdminController::class, 'suggestions']);
+    Route::post('/admin/suggestions', [AdminController::class, 'storeSuggestion']);
+    Route::delete('/admin/suggestions/{suggestion}', [AdminController::class, 'destroySuggestion']);
+    Route::post('/admin/migrate', [AdminController::class, 'migrate']);
     Route::post('/images/reprocess', [PostController::class, 'reprocessImages']);
     Route::post('/quizzes', [QuizController::class, 'store']);
     Route::post('/quizzes/generate', [QuizController::class, 'generate']);

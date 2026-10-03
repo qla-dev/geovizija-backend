@@ -7,6 +7,7 @@ use App\Http\Resources\PostResource;
 use App\Models\Category;
 use App\Models\Post;
 use App\Models\Quiz;
+use App\Models\Suggestion;
 use App\Services\InstagramPublisher;
 use App\Services\PostContentGenerator;
 use App\Services\MetaPublisher;
@@ -27,6 +28,7 @@ use Throwable;
  *   {"secret": "...", "type": "article", "category": "priroda", "title": "...", "excerpt": "...", "content": "...", "publishedAt"?: "ISO 8601"}
  *   {"secret": "...", "type": "article", "id": 12, ...only the fields to change...}  (edits an existing article)
  *   {"secret": "...", "type": "quiz", "date"?: "Y-m-d", "title": "...", "intro": "...", "questions": [...]}
+ *   {"secret": "...", "type": "suggestions", "used"?: [ids]}  (topic ideas from the admin panel; "used" marks them done)
  */
 class PublishController extends Controller
 {
@@ -40,7 +42,8 @@ class PublishController extends Controller
         return match ($request->input('type')) {
             'article' => $request->has('id') ? $this->updateArticle($request, $images) : $this->article($request, $images),
             'quiz' => $this->quiz($request, $quizzes),
-            default => response()->json(['message' => 'Polje "type" mora biti "article" ili "quiz".'], 422),
+            'suggestions' => $this->suggestions($request),
+            default => response()->json(['message' => 'Polje "type" mora biti "article", "quiz" ili "suggestions".'], 422),
         };
     }
 
@@ -302,6 +305,18 @@ class PublishController extends Controller
         if ($dropped = PostImageGenerator::dropPendingInline($post->refresh())) {
             $warnings[] = "Bez fotografije za {$dropped} [[SLIKA]] — uklonjeno iz teksta.";
         }
+    }
+
+    /** The admin panel's open topic suggestions for the agent; "used": [ids] marks those as done first. */
+    private function suggestions(Request $request)
+    {
+        $data = $request->validate(['used' => ['nullable', 'array'], 'used.*' => ['integer']]);
+        $marked = ($data['used'] ?? []) ? Suggestion::whereIn('id', $data['used'])->whereNull('used_at')->update(['used_at' => now()]) : 0;
+
+        return response()->json([
+            'marked' => $marked,
+            'suggestions' => Suggestion::whereNull('used_at')->orderBy('for_date')->orderBy('id')->get()->map->toApi(),
+        ]);
     }
 
     private function quiz(Request $request, QuizGenerator $quizzes)

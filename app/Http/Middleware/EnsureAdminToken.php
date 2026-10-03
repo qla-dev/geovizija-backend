@@ -2,11 +2,12 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\AdminPanel;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-/** Guards write endpoints with the static ADMIN_API_TOKEN bearer token. */
+/** Guards admin endpoints with the static ADMIN_API_TOKEN bearer token or an admin panel login token. */
 class EnsureAdminToken
 {
     public function handle(Request $request, Closure $next): Response
@@ -14,7 +15,8 @@ class EnsureAdminToken
         $expected = (string) config('services.admin.token');
         $given = (string) $request->bearerToken();
 
-        if ($expected === '' || $given === '' || ! hash_equals($expected, $given)) {
+        $static = $expected !== '' && $given !== '' && hash_equals($expected, $given);
+        if (! $static && ! AdminPanel::valid($given)) {
             return response()->json(['message' => 'Unauthorized.'], 401);
         }
 

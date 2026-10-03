@@ -33,6 +33,11 @@ class Post extends Model
         return $this->hasMany(Comment::class);
     }
 
+    public function views(): HasMany
+    {
+        return $this->hasMany(PageView::class);
+    }
+
     public function scopePublished(Builder $query): Builder
     {
         return $query->whereNotNull('published_at')->where('published_at', '<=', now());
