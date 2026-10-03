@@ -65,7 +65,8 @@ class AdminPanelTest extends TestCase
             ->assertJsonPath('topArticles.0.id', $post->id)->assertJsonPath('topArticles.0.views', 2)
             ->assertJsonPath('devices.mobile', 3)->assertJsonCount(3, 'recent');
         $this->withToken($token)->getJson('/api/admin/posts')->assertJsonPath('data.0.views', 2);
-        $this->withToken($token)->getJson("/api/admin/posts/{$post->id}")->assertOk()->assertJsonPath('data.views', 2);
+        $this->withToken($token)->getJson("/api/admin/posts/{$post->id}")->assertOk()->assertJsonPath('data.views', 2)
+            ->assertJsonPath('data.category', 'Priroda')->assertJsonPath('data.content', 'T');
     }
 
     public function test_suggestions_from_the_panel_reach_the_agent(): void

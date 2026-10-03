@@ -58,7 +58,9 @@ class AdminController extends Controller
             : [];
 
         return response()->json([
-            'data' => (new PostResource($post->load('category')))->resolve() + $this->row($post->loadCount(Schema::hasTable('page_views') ? ['views as views_count'] : [])),
+            // The list row wins (category as its name, as the panel shows it), plus the body.
+            'data' => $this->row($post->load('category')->loadCount(Schema::hasTable('page_views') ? ['views as views_count'] : []))
+                + ['content' => (new PostResource($post))->resolve()['content']],
             'daily' => $daily,
         ]);
     }
