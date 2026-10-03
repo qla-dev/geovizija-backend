@@ -14,3 +14,7 @@ Illuminate\Support\Facades\Schedule::command('instagram:publish-due')->everyMinu
 
 Illuminate\Support\Facades\Schedule::command('quizzes:generate')->dailyAt('00:05')->timezone('Europe/Sarajevo')
     ->when(fn () => (bool) config('services.quiz.auto_generate'));
+
+// Proof that the server cron runs schedule:run at all (admin GET /api/instagram/status shows it).
+Illuminate\Support\Facades\Schedule::call(fn () => Illuminate\Support\Facades\File::put(storage_path('app/scheduler-heartbeat'), now()->toIso8601String()))
+    ->everyMinute()->name('scheduler-heartbeat');

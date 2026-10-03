@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AgentController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CommentController;
+use App\Http\Controllers\Api\InstagramController;
 use App\Http\Controllers\Api\PostController;
 use App\Http\Controllers\Api\PublishController;
 use App\Http\Controllers\Api\QuizController;
@@ -35,6 +36,7 @@ Route::middleware(EnsureAdminToken::class)->group(function () {
     Route::post('/posts/{post}/generate-inline-image', [PostController::class, 'generateInlineImage']);
     Route::post('/posts/{post}/share-meta', [PostController::class, 'shareToMeta']);
     Route::post('/posts/{post}/share-instagram', [PostController::class, 'shareToInstagram']);
+    Route::get('/instagram/status', [InstagramController::class, 'status']);
     Route::post('/images/reprocess', [PostController::class, 'reprocessImages']);
     Route::post('/quizzes', [QuizController::class, 'store']);
     Route::post('/quizzes/generate', [QuizController::class, 'generate']);

@@ -65,6 +65,15 @@ return [
             'replace_placeholders' => true,
         ],
 
+        // instagram:publish-due runs and Instagram results (read through admin GET /api/instagram/status).
+        'instagram' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/instagram.log'),
+            'level' => 'debug',
+            'days' => 14,
+            'replace_placeholders' => true,
+        ],
+
         'daily' => [
             'driver' => 'daily',
             'path' => storage_path('logs/laravel.log'),

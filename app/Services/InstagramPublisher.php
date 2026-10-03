@@ -247,6 +247,7 @@ class InstagramPublisher
     private function fail(Post $post, string $message): array
     {
         Log::warning("Instagram publish failed for post {$post->id}: {$message}");
+        Log::channel('instagram')->warning("#{$post->id} failed: {$message}");
         $post->forceFill(['ig_status' => 'failed', 'ig_error' => mb_substr($message, 0, 500)])->save();
 
         return ['status' => 'failed', 'message' => $message];

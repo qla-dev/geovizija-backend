@@ -136,6 +136,19 @@ class InstagramTest extends TestCase
         Http::assertNothingSent();
     }
 
+    public function test_cron_run_is_recorded_and_status_endpoint_reports_it(): void
+    {
+        Http::fake();
+        $this->artisan('instagram:publish-due')->assertSuccessful();
+
+        $this->getJson('/api/instagram/status')->assertUnauthorized();
+        $this->withToken('admin-token')->getJson('/api/instagram/status')
+            ->assertOk()
+            ->assertJsonPath('configured', true)
+            ->assertJsonPath('igColumns', true)
+            ->assertJsonPath('commandLastRun.due', 0);
+    }
+
     public function test_admin_create_and_publishing_a_draft_queue_the_article(): void
     {
         Http::fake();
