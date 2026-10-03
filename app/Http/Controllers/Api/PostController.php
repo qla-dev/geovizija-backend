@@ -110,7 +110,11 @@ class PostController extends Controller
             return response()->json(['message' => 'Članak bez naslovne slike ne može biti objavljen — ostaje draft.'], 422);
         }
 
-        $wasScheduled = (bool) $post->published_at?->isFuture();
+        $wasScheduled = $post->isScheduled();
+        // Back to draft also ends a pause (a paused draft would stay hidden once published again).
+        if (array_key_exists('published_at', $data) && $data['published_at'] === null) {
+            $post->paused_at = null;
+        }
         $post->update($data);
         // ?cover_changed=1: the panel replaced the cover (generate-image) just before this save.
         $edited = $post->wasChanged() || $request->boolean('cover_changed');
@@ -125,7 +129,7 @@ class PostController extends Controller
         $facebook = match (true) {
             $post->wasChanged('published_at') && $post->published_at && ! $post->meta_post_id => $meta->share($post),
             ! $edited || ! $post->meta_post_id => null,
-            $wasScheduled && ! $post->published_at => $meta->unschedule($post),
+            $wasScheduled && ! $post->published_at => $meta->remove($post),
             $wasScheduled => $meta->share($post, force: true),
             default => null,
         };
@@ -135,6 +139,36 @@ class PostController extends Controller
         if ($post->wasChanged('published_at') && $post->published_at && $post->ig_status === null) {
             InstagramPublisher::queue($post);
         }
+
+        return (new PostResource($post->load('category')))->additional(array_filter(['facebook' => $facebook]));
+    }
+
+    /**
+     * Holds a scheduled article back: it stays "scheduled" even after its time and does not go to
+     * Facebook (its scheduled Page post is removed) or Instagram until resumed.
+     */
+    public function pause(Post $post)
+    {
+        if (! $post->isScheduled()) {
+            return response()->json(['message' => 'Pauzirati se može samo zakazan članak.'], 422);
+        }
+        $post->forceFill(['paused_at' => $post->paused_at ?? now()])->save();
+        $facebook = $post->meta_post_id ? app(MetaPublisher::class)->remove($post) : null;
+
+        return (new PostResource($post->load('category')))->additional(array_filter(['facebook' => $facebook]));
+    }
+
+    /**
+     * Ends a pause. A time still ahead is scheduled again (Facebook too); one already passed goes live
+     * now: Facebook at once, Instagram with the next instagram:publish-due run (every minute).
+     */
+    public function resume(Post $post)
+    {
+        if ($post->paused_at === null) {
+            return response()->json(['message' => 'Članak nije pauziran.'], 422);
+        }
+        $post->forceFill(['paused_at' => null])->save();
+        $facebook = $post->meta_post_id ? null : app(MetaPublisher::class)->share($post);
 
         return (new PostResource($post->load('category')))->additional(array_filter(['facebook' => $facebook]));
     }
@@ -242,15 +276,22 @@ class PostController extends Controller
         return new PostResource($post->refresh()->load('category'));
     }
 
-    public function destroy(Post $post)
+    /**
+     * Deletes the article and its Facebook and Instagram posts (scheduled or live). The article is
+     * deleted even when Meta refuses; the `facebook` / `instagram` results say what happened there.
+     */
+    public function destroy(Post $post, MetaPublisher $meta, InstagramPublisher $instagram)
     {
+        $facebook = $post->meta_post_id ? $meta->remove($post) : null;
+        $ig = $post->ig_media_id ? $instagram->remove($post) : null;
+
         if (PostImageGenerator::isGenerated($post->image_url)) {
             File::delete(public_path($post->image_url));
         }
 
         $post->delete();
 
-        return response()->noContent();
+        return response()->json(array_filter(['deleted' => true, 'facebook' => $facebook, 'instagram' => $ig]));
     }
 
     /** Accepts `category` as a slug and maps it to category_id. */

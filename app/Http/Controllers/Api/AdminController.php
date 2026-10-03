@@ -36,8 +36,8 @@ class AdminController extends Controller
             ->when($request->query('search'), fn ($q, $search) => $q->where('title', 'like', "%{$search}%"))
             ->when($request->query('status'), fn ($q, $status) => match ($status) {
                 'draft' => $q->whereNull('published_at'),
-                'scheduled' => $q->where('published_at', '>', now()),
-                'published' => $q->where('published_at', '<=', now()),
+                'scheduled' => $q->whereNotNull('published_at')->where(fn ($q) => $q->where('published_at', '>', now())->orWhereNotNull('paused_at')),
+                'published' => $q->published(),
                 default => $q,
             })
             ->orderByRaw('published_at is null desc')->orderByDesc('published_at')->orderByDesc('id');
@@ -159,7 +159,8 @@ class AdminController extends Controller
 
     private function row(Post $post): array
     {
-        $status = $post->published_at === null ? 'draft' : ($post->published_at->isFuture() ? 'scheduled' : 'published');
+        // A paused article stays "scheduled", also once its time has passed.
+        $status = $post->published_at === null ? 'draft' : ($post->isScheduled() ? 'scheduled' : 'published');
 
         return [
             'id' => $post->id,
@@ -170,6 +171,7 @@ class AdminController extends Controller
             'imageUrl' => (new PostResource($post))->resolve()['imageUrl'] ?? null,
             'publishedAt' => $post->published_at?->toIso8601String(),
             'status' => $status,
+            'paused' => $post->paused_at !== null,
             'views' => (int) ($post->views_count ?? 0),
             'facebook' => $post->meta_post_id ? 'shared' : ($post->meta_error ? 'failed' : null),
             'facebookError' => $post->meta_error,

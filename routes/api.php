@@ -41,6 +41,8 @@ Route::middleware(EnsureAdminToken::class)->group(function () {
     Route::post('/posts/{post}/generate-content', [PostController::class, 'generateContent']);
     Route::post('/posts/{post}/generate-inline-image', [PostController::class, 'generateInlineImage']);
     Route::post('/posts/{post}/share-meta', [PostController::class, 'shareToMeta']);
+    Route::post('/posts/{post}/pause', [PostController::class, 'pause']);
+    Route::post('/posts/{post}/resume', [PostController::class, 'resume']);
     Route::post('/posts/{post}/share-instagram', [PostController::class, 'shareToInstagram']);
     Route::get('/instagram/status', [InstagramController::class, 'status']);
     Route::get('/admin/posts', [AdminController::class, 'posts']);

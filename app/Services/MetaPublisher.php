@@ -47,6 +47,10 @@ class MetaPublisher
         if ($post->published_at === null) {
             return ['status' => 'skipped', 'message' => 'Nacrt se dijeli tek kad dobije datum objave.'];
         }
+        // A paused article is shared when it is resumed (PostController::resume).
+        if ($post->paused_at !== null) {
+            return ['status' => 'skipped', 'message' => 'Članak je pauziran.'];
+        }
 
         $publishAt = $post->published_at;
         if ($publishAt->greaterThan(now()->addDays(self::MAX_SCHEDULE_DAYS))) {
@@ -121,11 +125,11 @@ class MetaPublisher
         }
     }
 
-    /** Removes a not yet published (scheduled) Page post, e.g. when its article goes back to draft. */
-    public function unschedule(Post $post): array
+    /** Removes the article's Page post (scheduled or live): back to draft, paused or deleted. */
+    public function remove(Post $post): array
     {
         if (! self::configured() || ! $post->meta_post_id) {
-            return ['status' => 'skipped', 'message' => 'Nema zakazane Facebook objave.'];
+            return ['status' => 'skipped', 'message' => 'Nema Facebook objave.'];
         }
 
         try {
@@ -134,12 +138,12 @@ class MetaPublisher
             return $this->fail($post, 'Facebook nije dostupan: '.$exception->getMessage());
         }
         if (! $response->successful()) {
-            return $this->fail($post, 'Zakazana Facebook objava nije uklonjena: '.($response->json('error.message') ?? "HTTP {$response->status()}"));
+            return $this->fail($post, 'Facebook objava nije uklonjena: '.($response->json('error.message') ?? "HTTP {$response->status()}"));
         }
 
         $post->forceFill(['meta_post_id' => null, 'meta_shared_at' => null, 'meta_error' => null])->save();
 
-        return ['status' => 'removed', 'message' => 'Zakazana Facebook objava je uklonjena.'];
+        return ['status' => 'removed', 'message' => 'Facebook objava je uklonjena.'];
     }
 
     /** Built from SITE_URL, not APP_URL, so a CLI run on another machine still links to the live site. */

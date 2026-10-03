@@ -235,6 +235,27 @@ class InstagramPublisher
             ."\n\nCijeli članak na geovizija.com (link u opisu profila).\n\n".$tags, 0, 2200);
     }
 
+    /**
+     * Deletes the article's Instagram post (when its article is deleted). Needs the
+     * instagram_manage_contents permission on the token; Meta's refusal is returned, not thrown.
+     */
+    public function remove(Post $post): array
+    {
+        if (! self::configured() || ! $post->ig_media_id) {
+            return ['status' => 'skipped', 'message' => 'Nema Instagram objave.'];
+        }
+
+        try {
+            $response = Http::timeout(20)->delete($this->graph($post->ig_media_id).'?'.http_build_query(['access_token' => config('services.meta.page_token')]));
+        } catch (Throwable $exception) {
+            return ['status' => 'failed', 'message' => 'Instagram nije dostupan: '.$exception->getMessage()];
+        }
+
+        return $response->successful()
+            ? ['status' => 'removed', 'message' => 'Instagram objava je uklonjena.']
+            : ['status' => 'failed', 'message' => 'Instagram objava nije uklonjena: '.($response->json('error.message') ?? "HTTP {$response->status()}")];
+    }
+
     private function graph(string $path): string
     {
         return sprintf('https://graph.facebook.com/%s/%s', config('services.meta.graph_version'), $path);

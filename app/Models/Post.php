@@ -20,6 +20,7 @@ class Post extends Model
             'featured' => 'boolean',
             'read_time' => 'integer',
             'published_at' => 'datetime',
+            'paused_at' => 'datetime',
         ];
     }
 
@@ -38,14 +39,21 @@ class Post extends Model
         return $this->hasMany(PageView::class);
     }
 
+    /** Live: its publication time has passed and it is not paused in the admin panel. */
     public function scopePublished(Builder $query): Builder
     {
-        return $query->whereNotNull('published_at')->where('published_at', '<=', now());
+        return $query->whereNotNull('published_at')->where('published_at', '<=', now())->whereNull('paused_at');
     }
 
     public function isPublished(): bool
     {
-        return $this->published_at !== null && ! $this->published_at->isFuture();
+        return $this->published_at !== null && ! $this->published_at->isFuture() && $this->paused_at === null;
+    }
+
+    /** Waiting to go live: a future publication time, or held back by a pause. */
+    public function isScheduled(): bool
+    {
+        return $this->published_at !== null && ! $this->isPublished();
     }
 
     /** Resolves a post by numeric id or by slug. */

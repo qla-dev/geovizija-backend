@@ -163,6 +163,46 @@ class MetaShareTest extends TestCase
         $this->assertCount(3, Http::recorded(fn (Request $r) => ($r->data()['scrape'] ?? null) === 'true'));
     }
 
+    public function test_paused_article_stays_hidden_until_resumed(): void
+    {
+        $this->fakeFacebook();
+        $post = $this->article(['published_at' => now()->addHour()]);
+        $post->forceFill(['meta_post_id' => '123_1', 'ig_status' => 'pending'])->save();
+
+        $this->withToken('admin-token')->postJson("/api/posts/{$post->id}/pause")->assertOk()->assertJsonPath('facebook.status', 'removed');
+        Http::assertSent(fn (Request $r) => $r->method() === 'DELETE' && str_contains($r->url(), '/123_1?'));
+        $this->assertNull($post->refresh()->meta_post_id);
+
+        // Its time passes: still hidden, still "scheduled" in the panel, not shared anywhere.
+        $this->travel(2)->hours();
+        $this->getJson('/api/posts')->assertJsonCount(0, 'data');
+        $this->getJson("/api/posts/{$post->id}")->assertNotFound();
+        $this->withToken('admin-token')->getJson('/api/admin/posts?status=scheduled')->assertJsonPath('data.0.paused', true)->assertJsonPath('data.0.status', 'scheduled');
+        $this->assertSame('skipped', app(MetaPublisher::class)->share($post->refresh())['status']);
+        $this->withToken('admin-token')->patchJson("/api/posts/{$post->id}", ['published_at' => now()->addHour()->toIso8601String()])->assertOk();
+        $this->assertCount(0, Http::recorded(fn (Request $r) => $r->url() === self::FEED));
+
+        // Resumed after its (new) time: live at once, Facebook now, Instagram with the next cron run.
+        $this->travel(2)->hours();
+        $this->withToken('admin-token')->postJson("/api/posts/{$post->id}/resume")->assertOk()->assertJsonPath('facebook.status', 'posted');
+        $this->getJson("/api/posts/{$post->id}")->assertOk();
+        $this->assertSame('pending', $post->refresh()->ig_status);
+    }
+
+    public function test_deleting_an_article_removes_its_facebook_and_instagram_posts(): void
+    {
+        $this->fakeFacebook();
+        config(['services.meta.ig_user_id' => '777']);
+        $post = $this->article();
+        $post->forceFill(['meta_post_id' => '123_1', 'ig_media_id' => '999'])->save();
+
+        $this->withToken('admin-token')->deleteJson("/api/posts/{$post->id}")->assertOk()
+            ->assertJsonPath('facebook.status', 'removed')->assertJsonPath('instagram.status', 'removed');
+        Http::assertSent(fn (Request $r) => $r->method() === 'DELETE' && str_contains($r->url(), '/123_1?'));
+        Http::assertSent(fn (Request $r) => $r->method() === 'DELETE' && str_contains($r->url(), '/999?'));
+        $this->assertNull(Post::find($post->id));
+    }
+
     public function test_scheduled_page_post_follows_edits_and_draft(): void
     {
         $this->fakeFacebook();
