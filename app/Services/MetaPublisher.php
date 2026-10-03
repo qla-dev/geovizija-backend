@@ -66,20 +66,7 @@ class MetaPublisher
             $params['scheduled_publish_time'] = $scheduledFor->getTimestamp();
         }
 
-        // The link image with the current title, then let Facebook re-read the preview (it keeps one
-        // for weeks) so a new cover or title shows.
-        if (PostImageGenerator::isGenerated($post->image_url)) {
-            try {
-                app(InstagramStory::class)->facebook($post);
-            } catch (Throwable $exception) {
-                Log::warning("Facebook image for post {$post->id} not drawn: {$exception->getMessage()}");
-            }
-        }
-        try {
-            Http::asForm()->timeout(20)->post($this->graph(''), ['id' => $params['link'], 'scrape' => 'true', 'access_token' => $params['access_token']]);
-        } catch (Throwable) {
-            // The post still goes out, with whatever preview Facebook has.
-        }
+        $this->refreshPreview($post);
 
         try {
             $response = Http::asForm()->timeout(30)->post($this->endpoint(), $params);
@@ -109,6 +96,50 @@ class MetaPublisher
         return $scheduledFor
             ? ['status' => 'scheduled', 'message' => 'Facebook objava je zakazana.', 'postId' => $post->meta_post_id, 'scheduledFor' => $scheduledFor->toIso8601String()]
             : ['status' => 'posted', 'message' => 'Članak je podijeljen na Facebooku.', 'postId' => $post->meta_post_id];
+    }
+
+    /**
+     * Redraws the link image with the current title, then lets Facebook re-read the preview (it keeps
+     * one for weeks) so a new cover or title shows, also under an already published Page post.
+     */
+    public function refreshPreview(Post $post): void
+    {
+        if (! self::configured()) {
+            return;
+        }
+        if (PostImageGenerator::isGenerated($post->image_url)) {
+            try {
+                app(InstagramStory::class)->facebook($post);
+            } catch (Throwable $exception) {
+                Log::warning("Facebook image for post {$post->id} not drawn: {$exception->getMessage()}");
+            }
+        }
+        try {
+            Http::asForm()->timeout(20)->post($this->graph(''), ['id' => self::articleUrl($post), 'scrape' => 'true', 'access_token' => config('services.meta.page_token')]);
+        } catch (Throwable) {
+            // A share still goes out, with whatever preview Facebook has.
+        }
+    }
+
+    /** Removes a not yet published (scheduled) Page post, e.g. when its article goes back to draft. */
+    public function unschedule(Post $post): array
+    {
+        if (! self::configured() || ! $post->meta_post_id) {
+            return ['status' => 'skipped', 'message' => 'Nema zakazane Facebook objave.'];
+        }
+
+        try {
+            $response = Http::timeout(20)->delete($this->graph($post->meta_post_id).'?'.http_build_query(['access_token' => config('services.meta.page_token')]));
+        } catch (Throwable $exception) {
+            return $this->fail($post, 'Facebook nije dostupan: '.$exception->getMessage());
+        }
+        if (! $response->successful()) {
+            return $this->fail($post, 'Zakazana Facebook objava nije uklonjena: '.($response->json('error.message') ?? "HTTP {$response->status()}"));
+        }
+
+        $post->forceFill(['meta_post_id' => null, 'meta_shared_at' => null, 'meta_error' => null])->save();
+
+        return ['status' => 'removed', 'message' => 'Zakazana Facebook objava je uklonjena.'];
     }
 
     /** Built from SITE_URL, not APP_URL, so a CLI run on another machine still links to the live site. */

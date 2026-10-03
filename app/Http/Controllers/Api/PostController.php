@@ -110,15 +110,28 @@ class PostController extends Controller
             return response()->json(['message' => 'Članak bez naslovne slike ne može biti objavljen — ostaje draft.'], 422);
         }
 
+        $wasScheduled = (bool) $post->published_at?->isFuture();
         $post->update($data);
+        // ?cover_changed=1: the panel replaced the cover (generate-image) just before this save.
+        $edited = $post->wasChanged() || $request->boolean('cover_changed');
 
         // In-text images the new body no longer references are deleted.
         PostImageGenerator::pruneInline($oldImages, (string) $post->content);
 
-        // A draft that gets its publication date (now or scheduled) is shared then; edits are not re-shared.
-        $facebook = $post->wasChanged('published_at') && $post->published_at && ! $post->meta_post_id
-            ? app(MetaPublisher::class)->share($post)
-            : null;
+        // A draft that gets its publication date (now or scheduled) is shared then. A scheduled Page post
+        // is not public yet, so it follows every edit (replaced; removed when the article goes back to
+        // draft). A live one is kept (likes, comments): only its link preview is refreshed.
+        $meta = app(MetaPublisher::class);
+        $facebook = match (true) {
+            $post->wasChanged('published_at') && $post->published_at && ! $post->meta_post_id => $meta->share($post),
+            ! $edited || ! $post->meta_post_id => null,
+            $wasScheduled && ! $post->published_at => $meta->unschedule($post),
+            $wasScheduled => $meta->share($post, force: true),
+            default => null,
+        };
+        if (! $wasScheduled && $post->meta_post_id && ($post->wasChanged(['title', 'excerpt', 'image_url']) || $request->boolean('cover_changed'))) {
+            $meta->refreshPreview($post);
+        }
         if ($post->wasChanged('published_at') && $post->published_at && $post->ig_status === null) {
             InstagramPublisher::queue($post);
         }

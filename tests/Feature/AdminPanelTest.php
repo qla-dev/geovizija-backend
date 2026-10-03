@@ -69,6 +69,31 @@ class AdminPanelTest extends TestCase
             ->assertJsonPath('data.category', 'Priroda')->assertJsonPath('data.content', 'T');
     }
 
+    public function test_panel_edits_an_article_from_its_raw_fields(): void
+    {
+        $category = Category::create(['slug' => 'priroda', 'name' => 'Priroda']);
+        Category::create(['slug' => 'ljudi', 'name' => 'Ljudi']);
+        $post = Post::create([
+            'category_id' => $category->id, 'slug' => 'una', 'title' => 'Una', 'excerpt' => 'E',
+            'content' => "Uvod\n[[SLIKA: rijeka]]\n![Opis](media/posts/una-1.jpg)", 'author' => 'A', 'read_time' => 1,
+            'image_url' => 'media/posts/una.jpg', 'published_at' => now()->subHour(),
+        ]);
+        $token = $this->login();
+
+        $edit = $this->withToken($token)->getJson("/api/admin/posts/{$post->id}")->assertOk()
+            ->assertJsonPath('data.edit.categorySlug', 'priroda')->json('data.edit');
+        $this->assertStringContainsString('[[SLIKA: rijeka]]', $edit['content']);
+
+        $this->withToken($token)->putJson("/api/posts/{$post->id}", [
+            'title' => 'Una ljeti', 'excerpt' => 'Novo', 'category' => 'ljudi', 'content' => "Novi uvod\n".$edit['content'],
+        ])->assertOk();
+
+        $post->refresh();
+        $this->assertSame('Una ljeti', $post->title);
+        $this->assertSame('ljudi', $post->category->slug);
+        $this->assertStringContainsString("[[SLIKA: rijeka]]\n![Opis](media/posts/una-1.jpg)", $post->content);
+    }
+
     public function test_suggestions_from_the_panel_reach_the_agent(): void
     {
         $token = $this->login();

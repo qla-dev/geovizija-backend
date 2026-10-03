@@ -152,8 +152,37 @@ class MetaShareTest extends TestCase
             ->assertOk()->assertJsonPath('facebook.status', 'scheduled');
         Http::assertSent(fn (Request $r) => $r->url() === self::FEED && (int) $r['scheduled_publish_time'] === $at->getTimestamp());
 
-        $this->withToken('admin-token')->patchJson("/api/posts/{$id}", ['published_at' => now()->toIso8601String()])->assertJsonMissingPath('facebook');
-        $this->assertCount(1, Http::recorded(fn (Request $r) => $r->url() === self::FEED));
+        // Published now instead: the scheduled Page post is replaced by one that goes out at once.
+        $this->withToken('admin-token')->patchJson("/api/posts/{$id}", ['published_at' => now()->toIso8601String()])
+            ->assertJsonPath('facebook.status', 'posted');
+        $this->assertCount(2, Http::recorded(fn (Request $r) => $r->url() === self::FEED));
+
+        // Live: edits keep the Page post, only its preview is re-read.
+        $this->withToken('admin-token')->patchJson("/api/posts/{$id}", ['title' => 'Nacrt 3'])->assertJsonMissingPath('facebook');
+        $this->assertCount(2, Http::recorded(fn (Request $r) => $r->url() === self::FEED));
+        $this->assertCount(3, Http::recorded(fn (Request $r) => ($r->data()['scrape'] ?? null) === 'true'));
+    }
+
+    public function test_scheduled_page_post_follows_edits_and_draft(): void
+    {
+        $this->fakeFacebook();
+        $post = $this->article(['published_at' => now()->addHours(5)]);
+        $post->forceFill(['meta_post_id' => '123_1'])->save();
+
+        $this->withToken('admin-token')->patchJson("/api/posts/{$post->id}", ['content' => 'Novi tekst'])
+            ->assertOk()->assertJsonPath('facebook.status', 'scheduled');
+        Http::assertSent(fn (Request $r) => $r->method() === 'DELETE' && str_contains($r->url(), '/123_1?'));
+        $this->assertSame('123_456', $post->refresh()->meta_post_id);
+
+        // Saved unchanged: nothing is sent.
+        $sent = count(Http::recorded());
+        $this->withToken('admin-token')->patchJson("/api/posts/{$post->id}", ['content' => 'Novi tekst'])->assertJsonMissingPath('facebook');
+        $this->assertCount($sent, Http::recorded());
+
+        $this->withToken('admin-token')->patchJson("/api/posts/{$post->id}", ['published_at' => null])
+            ->assertJsonPath('facebook.status', 'removed');
+        Http::assertSent(fn (Request $r) => $r->method() === 'DELETE' && str_contains($r->url(), '/123_456?'));
+        $this->assertNull($post->refresh()->meta_post_id);
     }
 
     public function test_forced_reshare_refreshes_preview_and_replaces_old_post(): void

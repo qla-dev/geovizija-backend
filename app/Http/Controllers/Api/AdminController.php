@@ -60,7 +60,15 @@ class AdminController extends Controller
         return response()->json([
             // The list row wins (category as its name, as the panel shows it), plus the body.
             'data' => $this->row($post->load('category')->loadCount(Schema::hasTable('page_views') ? ['views as views_count'] : []))
-                + ['content' => (new PostResource($post))->resolve()['content']],
+                + ['content' => (new PostResource($post))->resolve()['content']]
+                // The stored fields for the panel's edit form: the raw body keeps pending "[[SLIKA: ...]]"
+                // markers and relative image paths, which the rendered `content` drops or rewrites.
+                + ['edit' => [
+                    'categorySlug' => $post->category?->slug,
+                    'content' => (string) $post->content,
+                    'author' => $post->author,
+                    'featured' => (bool) $post->featured,
+                ]],
             'daily' => $daily,
         ]);
     }
