@@ -25,9 +25,6 @@ use Throwable;
  */
 class InstagramPublisher
 {
-    /** One-time image copies handed to Instagram for the current post (see feedImage). */
-    private array $temporary = [];
-
     public static function configured(): bool
     {
         return filled(config('services.meta.ig_user_id')) && filled(config('services.meta.page_token'));
@@ -74,10 +71,6 @@ class InstagramPublisher
             $published = $this->publishContainer($container['id']);
         } catch (Throwable $exception) {
             return $this->fail($post, 'Instagram nije dostupan: '.$exception->getMessage());
-        } finally {
-            // Instagram has its copy once the container is processed.
-            File::delete(array_map('public_path', $this->temporary));
-            $this->temporary = [];
         }
 
         if (! $published->successful() || ! $published->json('id')) {
@@ -211,15 +204,12 @@ class InstagramPublisher
     {
         if (PostImageGenerator::isGenerated($post->image_url)) {
             try {
-                // Instagram (and the host's cache) keep what they once fetched from a URL, so it gets
-                // a one-time copy under a new name, removed after publishing (see $this->temporary).
+                // Instagram (and the host's cache) keep what they once fetched from a URL, so the
+                // query string changes on every post. (A one-time copy written just before the
+                // request could not be fetched by Instagram: "Only photo or video can be accepted".)
                 $saved = app(InstagramStory::class)->feed($post);
-                $copy = InstagramStory::DIRECTORY.'/'.$post->slug.'-'.now()->format('YmdHis').'-ig.jpg';
-                File::ensureDirectoryExists(public_path(InstagramStory::DIRECTORY));
-                File::copy(public_path($saved), public_path($copy));
-                $this->temporary[] = $copy;
 
-                return asset($copy);
+                return asset($saved).'?v='.now()->format('YmdHis');
             } catch (Throwable $exception) {
                 Log::warning("Instagram image for post {$post->id} not drawn: {$exception->getMessage()}");
             }

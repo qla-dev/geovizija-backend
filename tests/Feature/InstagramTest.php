@@ -85,10 +85,9 @@ class InstagramTest extends TestCase
         $story = Http::recorded(fn (Request $r) => $r->url() === self::MEDIA && ($r->data()['media_type'] ?? null) === 'STORIES')->first()[0];
         $this->assertMatchesRegularExpression('#/media/stories/una-\d{14}\.jpg$#', $story['image_url']);
         $this->assertCount(2, Http::recorded(fn (Request $r) => $r->url() === self::PUBLISH));
-        // The post image goes out under a one-time name (Instagram caches by URL) that is then removed.
+        // The post image is the stable -ig.jpg with a changing query string (Instagram caches by URL).
         $feed = Http::recorded(fn (Request $r) => $r->url() === self::MEDIA && ! isset($r->data()['media_type']))->first()[0];
-        $this->assertMatchesRegularExpression('#/media/stories/una-\d{14}-ig\.jpg$#', $feed['image_url']);
-        $this->assertSame([], glob(public_path('media/stories/una-*-ig.jpg')));
+        $this->assertMatchesRegularExpression('#/media/posts/[^/]+-ig\.jpg\?v=\d{14}$#', $feed['image_url']);
         $this->assertSame([], glob(public_path('media/stories/una-*.jpg')));
 
         \Illuminate\Support\Facades\File::delete(public_path('media/posts/story-test-w3.jpg'));
