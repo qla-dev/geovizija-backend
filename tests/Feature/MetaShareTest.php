@@ -139,7 +139,7 @@ class MetaShareTest extends TestCase
     {
         $this->fakeFacebook();
         $this->withToken('admin-token')->postJson('/api/posts', [
-            'category' => 'priroda', 'title' => 'Nacrt', 'excerpt' => 'Uvod', 'content' => 'Tekst', 'published_at' => null,
+            'category' => 'priroda', 'title' => 'Nacrt', 'excerpt' => 'Uvod', 'content' => 'Tekst', 'image_url' => 'https://geovizija.com/media/posts/x.jpg', 'published_at' => null,
         ])->assertCreated()->assertJsonPath('facebook.status', 'skipped');
         Http::assertNothingSent();
         $id = Post::value('id');
@@ -191,7 +191,7 @@ class MetaShareTest extends TestCase
     {
         $this->fakeFacebook();
         $this->withToken('admin-token')->postJson('/api/posts', [
-            'category' => 'priroda', 'title' => 'Novi članak', 'excerpt' => 'Uvod', 'content' => 'Tekst', 'published_at' => now()->subMinute()->toIso8601String(),
+            'category' => 'priroda', 'title' => 'Novi članak', 'excerpt' => 'Uvod', 'content' => 'Tekst', 'image_url' => 'https://geovizija.com/media/posts/x.jpg', 'published_at' => now()->subMinute()->toIso8601String(),
         ])->assertCreated()->assertJsonPath('facebook.status', 'posted');
 
         $post = $this->article(['slug' => 'drugi']);

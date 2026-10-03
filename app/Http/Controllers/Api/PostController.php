@@ -55,6 +55,10 @@ class PostController extends Controller
         $data['featured'] ??= false;
         $data['author'] ??= self::DEFAULT_AUTHOR;
         $data['read_time'] ??=max(1, (int) ceil(str_word_count(strip_tags($data['content'])) / 200));
+        // Never published without a cover: such a post stays a draft until it gets one.
+        if (empty($data['image_url'])) {
+            $data['published_at'] = null;
+        }
 
         $post = Post::create($data);
         $facebook = app(MetaPublisher::class)->share($post);
@@ -99,8 +103,14 @@ class PostController extends Controller
     public function update(Request $request, Post $post)
     {
         $oldImages = PostImageGenerator::inlinePaths((string) $post->content);
+        $data = $this->validated($request, $post);
 
-        $post->update($this->validated($request, $post));
+        $cover = array_key_exists('image_url', $data) ? $data['image_url'] : $post->image_url;
+        if (! empty($data['published_at']) && empty($cover)) {
+            return response()->json(['message' => 'Članak bez naslovne slike ne može biti objavljen — ostaje draft.'], 422);
+        }
+
+        $post->update($data);
 
         // In-text images the new body no longer references are deleted.
         PostImageGenerator::pruneInline($oldImages, (string) $post->content);
@@ -167,43 +177,41 @@ class PostController extends Controller
     }
 
     /**
-     * Replaces the cover image: the optional `image` (data URL or https link) when sent,
-     * otherwise a new drawing through OpenRouter. On failure the old cover stays.
+     * Replaces the cover with the required `image` (data URL or https link of a real photograph;
+     * nothing is drawn by AI). On failure the old cover stays.
      */
     public function generateImage(Request $request, Post $post, PostImageGenerator $generator)
     {
-        $data = $request->validate(['image' => ['nullable', 'string']]);
+        $data = $request->validate(['image' => ['required', 'string']]);
 
         try {
-            $generator->generate($post, $data['image'] ?? null);
+            $generator->generate($post, $data['image']);
         } catch (RuntimeException $exception) {
-            return response()->json(['message' => $exception->getMessage()], 502);
+            return response()->json(['message' => $exception->getMessage()], 422);
         }
 
         return new PostResource($post->refresh()->load('category'));
     }
 
     /**
-     * Without `number`: draws the next pending in-text image ("[[SLIKA: ...]]" marker); call
-     * repeatedly until `pending` is 0, one image per request keeps each call short.
-     * With `number`: replaces that existing in-text image (1-based) instead, from the optional
-     * `description` (default: the old caption). Either way an optional `image` (data URL or
-     * https link) is used instead of drawing through OpenRouter.
+     * Stores the required `image` (data URL or https link of a real photograph): without `number`
+     * for the next pending "[[SLIKA: ...]]" marker, with `number` in place of that existing in-text
+     * image (1-based; optional new caption `description`).
      */
     public function generateInlineImage(Request $request, Post $post, PostImageGenerator $generator)
     {
         $data = $request->validate([
-            'image' => ['nullable', 'string'],
+            'image' => ['required', 'string'],
             'number' => ['nullable', 'integer', 'min:1'],
             'description' => ['nullable', 'string', 'max:500'],
         ]);
 
         try {
             $path = isset($data['number'])
-                ? $generator->replaceInline($post, $data['number'], $data['image'] ?? null, $data['description'] ?? null)
-                : $generator->generateNextInline($post, $data['image'] ?? null);
+                ? $generator->replaceInline($post, $data['number'], $data['image'], $data['description'] ?? null)
+                : $generator->generateNextInline($post, $data['image']);
         } catch (RuntimeException $exception) {
-            return response()->json(['message' => $exception->getMessage(), 'pending' => PostImageGenerator::pendingInline($post)], 502);
+            return response()->json(['message' => $exception->getMessage(), 'pending' => PostImageGenerator::pendingInline($post)], 422);
         }
 
         return response()->json(['generated' => $path, 'pending' => PostImageGenerator::pendingInline($post->refresh())]);

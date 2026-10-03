@@ -82,7 +82,7 @@ class ImageOptimizeTest extends TestCase
         $this->assertFileExists(PostImageGenerator::originalPath($path));
         $this->assertSame([2400, 1600], array_slice(getimagesize(PostImageGenerator::originalPath($path)), 0, 2));
         $this->assertSame([1080, 1350], array_slice(getimagesize(public_path(PostImageGenerator::portraitPath($path))), 0, 2));
-        $this->assertSame([1200, 630], array_slice(getimagesize(public_path(PostImageGenerator::sharePath($path))), 0, 2));
+        $this->assertSame([1080, 1080], array_slice(getimagesize(public_path(PostImageGenerator::sharePath($path))), 0, 2));
 
         // A new cover removes the old one with its portrait and original.
         $next = app(PostImageGenerator::class)->generate($post, $source);

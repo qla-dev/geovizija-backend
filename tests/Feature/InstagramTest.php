@@ -140,7 +140,7 @@ class InstagramTest extends TestCase
     {
         Http::fake();
         $create = fn (array $extra) => $this->withToken('admin-token')->postJson('/api/posts', $extra + [
-            'category' => 'priroda', 'title' => 'Naslov', 'excerpt' => 'Uvod', 'content' => 'Tekst',
+            'category' => 'priroda', 'title' => 'Naslov', 'excerpt' => 'Uvod', 'content' => 'Tekst', 'image_url' => 'https://geovizija.com/media/posts/x.jpg',
         ])->assertCreated()->json('data.id');
 
         $scheduled = $create(['published_at' => now()->addDay()->toIso8601String()]);

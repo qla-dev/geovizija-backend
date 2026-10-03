@@ -27,10 +27,8 @@ class PostUpdateTest extends TestCase
         config([
             'services.publish.secret_hash' => Hash::make('tajna'),
             'services.admin.token' => 'admin-token',
-            'services.openrouter.api_key' => 'test',
-            'services.openrouter.url' => 'https://openrouter.test/chat',
         ]);
-        Http::fake(['openrouter.test/*' => Http::response(['choices' => [['message' => ['images' => [['image_url' => ['url' => self::PNG]]]]]]])]);
+        Http::fake();
 
         $this->created = File::glob(public_path(PostImageGenerator::DIRECTORY.'/*'));
     }
@@ -55,9 +53,9 @@ class PostUpdateTest extends TestCase
             'content' => $body, 'author' => 'Kulašin', 'read_time' => 2, 'featured' => false, 'published_at' => now(),
         ]);
         $generator = app(PostImageGenerator::class);
-        $generator->generate($post);
-        $generator->generateNextInline($post);
-        $generator->generateNextInline($post);
+        $generator->generate($post, self::PNG);
+        $generator->generateNextInline($post, self::PNG);
+        $generator->generateNextInline($post, self::PNG);
 
         return $post->refresh();
     }
@@ -74,10 +72,10 @@ class PostUpdateTest extends TestCase
             'secret' => 'tajna', 'type' => 'article', 'id' => $post->id,
             'title' => 'Novi naslov',
             'cover' => self::PNG,
-            'replaceInline' => [['number' => 2, 'description' => 'Nova scena']],
+            'replaceInline' => [['number' => 2, 'image' => self::PNG, 'description' => 'Nova scena']],
         ]);
 
-        $response->assertOk()->assertJsonPath('images', ['agent' => 1, 'api' => 1])->assertJsonPath('warnings', []);
+        $response->assertOk()->assertJsonPath('images', ['agent' => 2])->assertJsonPath('warnings', []);
         $post->refresh();
         $this->assertSame('Novi naslov', $post->title);
         $this->assertSame('test', $post->slug);
@@ -102,7 +100,7 @@ class PostUpdateTest extends TestCase
         $this->postJson('/api/publish', [
             'secret' => 'tajna', 'type' => 'article', 'id' => $post->id,
             'content' => $apiContent."\n\nJoš jedan pasus.",
-        ])->assertOk()->assertJsonPath('images', ['agent' => 0, 'api' => 0]);
+        ])->assertOk()->assertJsonPath('images', ['agent' => 0]);
 
         $this->assertSame($paths, PostImageGenerator::inlinePaths($post->refresh()->content));
         foreach ($paths as $path) {
@@ -124,6 +122,65 @@ class PostUpdateTest extends TestCase
         $this->assertSame('Test', $post->title);
     }
 
+    private function newArticle(array $extra = []): \Illuminate\Testing\TestResponse
+    {
+        Category::firstOrCreate(['slug' => 'priroda'], ['name' => 'Priroda']);
+        $body = str_repeat('Riječ ', 200)."\n\n[[SLIKA: Prva scena]]\n\n## Podnaslov\n\n[[SLIKA: Druga scena]]\n\n".str_repeat('Kraj ', 50);
+
+        return $this->postJson('/api/publish', [
+            'secret' => 'tajna', 'type' => 'article', 'category' => 'priroda',
+            'title' => 'Novi članak', 'excerpt' => 'Sažetak', 'content' => $body,
+            'publishedAt' => now()->addDay()->toIso8601String(),
+        ] + $extra);
+    }
+
+    public function test_article_with_cover_is_scheduled_and_marker_without_photo_is_removed(): void
+    {
+        $this->newArticle(['cover' => self::PNG, 'inlineImages' => [self::PNG]])
+            ->assertCreated()->assertJsonPath('status', 'scheduled')->assertJsonPath('images', ['agent' => 2]);
+
+        $post = Post::sole();
+        $this->assertNotNull($post->published_at);
+        $this->assertNotNull($post->image_url);
+        $this->assertCount(1, PostImageGenerator::inlinePaths($post->content));
+        $this->assertSame(0, PostImageGenerator::pendingInline($post));
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), "openrouter"));
+    }
+
+    public function test_article_without_usable_cover_stays_draft_until_published_with_one(): void
+    {
+        $this->newArticle()->assertStatus(202)->assertJsonPath('status', 'draft');
+        $this->newArticle(['cover' => 'ftp://nije-slika'])->assertStatus(202)->assertJsonPath('status', 'draft');
+        $this->assertSame(0, Post::whereNotNull('published_at')->count());
+        $this->assertSame(0, Post::whereNotNull('image_url')->count());
+
+        $post = Post::first();
+        $when = now()->addDay()->toIso8601String();
+
+        // publishedAt alone does not publish a draft without a cover.
+        $this->postJson('/api/publish', ['secret' => 'tajna', 'type' => 'article', 'id' => $post->id, 'publishedAt' => $when])
+            ->assertJsonPath('status', 'draft');
+        $this->assertNull($post->refresh()->published_at);
+
+        $this->postJson('/api/publish', ['secret' => 'tajna', 'type' => 'article', 'id' => $post->id, 'cover' => self::PNG, 'publishedAt' => $when])
+            ->assertOk()->assertJsonPath('status', 'scheduled');
+        $this->assertNotNull($post->refresh()->published_at);
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), "openrouter"));
+    }
+
+    public function test_admin_cannot_publish_a_post_without_cover(): void
+    {
+        Category::create(['slug' => 'priroda', 'name' => 'Priroda']);
+        $headers = ['Authorization' => 'Bearer admin-token'];
+
+        $id = $this->postJson('/api/posts', ['category' => 'priroda', 'title' => 'Bez slike', 'content' => 'Tekst', 'published_at' => now()->toIso8601String()], $headers)
+            ->assertCreated()->json('data.id');
+        $this->assertNull(Post::find($id)->published_at);
+
+        $this->patchJson("/api/posts/{$id}", ['published_at' => now()->toIso8601String()], $headers)->assertStatus(422);
+        $this->assertNull(Post::find($id)->published_at);
+    }
+
     public function test_admin_routes_accept_own_image_and_replace_by_number(): void
     {
         $post = $this->article();
@@ -131,12 +188,13 @@ class PostUpdateTest extends TestCase
         $this->travel(2)->seconds();
 
         $this->postJson("/api/posts/{$post->id}/generate-image", ['image' => self::PNG], $headers)->assertOk();
-        Http::assertSentCount(3); // only the three drawings from article()
 
         $this->postJson("/api/posts/{$post->id}/generate-inline-image", ['number' => 1, 'image' => self::PNG], $headers)
             ->assertOk()->assertJsonPath('pending', 0);
-        Http::assertSentCount(3);
 
-        $this->postJson("/api/posts/{$post->id}/generate-inline-image", ['number' => 3], $headers)->assertStatus(502);
+        $this->postJson("/api/posts/{$post->id}/generate-inline-image", ['number' => 3, 'image' => self::PNG], $headers)->assertStatus(422);
+        // Nothing is drawn: without an image the request is refused.
+        $this->postJson("/api/posts/{$post->id}/generate-image", [], $headers)->assertStatus(422);
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), "openrouter"));
     }
 }

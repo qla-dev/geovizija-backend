@@ -56,8 +56,9 @@ class PublishController extends Controller
             // Until then the article is hidden from the site and from /posts (Post::published()).
             'publishedAt' => ['nullable', 'date'],
             'published_at' => ['nullable', 'date'],
-            // Optional images supplied by the agent ("data:image/...;base64,..." or https link).
-            // Any that are missing or fail are drawn through OpenRouter instead.
+            // Real photographs only ("data:image/...;base64,..." or https link); nothing is drawn by AI.
+            // Without a usable cover the article is saved as a draft; a "[[SLIKA: ...]]" marker without
+            // a photo is removed from the body.
             'cover' => ['nullable', 'string'],
             'inlineImages' => ['nullable', 'array', 'max:2'],
             'inlineImages.*' => ['nullable', 'string'],
@@ -83,42 +84,46 @@ class PublishController extends Controller
             'author' => $data['author'] ?? PostController::DEFAULT_AUTHOR,
             'read_time' => max(1, (int) ceil($words / 200)),
             'featured' => false,
-            'published_at' => $publishAt,
+            // A draft until the cover is stored, so the article is never visible without it.
+            'published_at' => null,
         ]);
 
-        // Images take ~20 s each; keep going even if the browser gives up waiting.
+        // Downloading and processing the photos can take a while; keep going if the client gives up.
         ignore_user_abort(true);
         set_time_limit(300);
 
         $warnings = [];
-        $sources = ['agent' => 0, 'api' => 0];
+        $sources = ['agent' => 0];
 
-        // Supplied image first; on failure (or when none was sent) fall back to OpenRouter.
-        $place = function (callable $store, ?string $supplied, string $label) use (&$warnings, &$sources) {
-            if ($supplied) {
-                try {
-                    $store($supplied);
-                    $sources['agent']++;
-
-                    return;
-                } catch (Throwable $exception) {
-                    $warnings[] = "{$label}: poslana slika odbijena ({$exception->getMessage()}), generišem preko API-ja.";
-                }
-            }
+        $coverError = empty($data['cover']) ? 'nije poslana' : null;
+        if ($coverError === null) {
             try {
-                $store(null);
-                $sources['api']++;
+                $images->generate($post, $data['cover']);
+                $sources['agent']++;
             } catch (Throwable $exception) {
-                $warnings[] = "{$label} nije generisana: ".$exception->getMessage();
+                $coverError = 'odbijena: '.$exception->getMessage();
             }
-        };
-
-        $place(fn (?string $src) => $images->generate($post, $src), $data['cover'] ?? null, 'Naslovna slika');
-
-        $inline = array_values($data['inlineImages'] ?? []);
-        for ($i = 0; $i < 2 && PostImageGenerator::pendingInline($post->refresh()) > 0; $i++) {
-            $place(fn (?string $src) => $images->generateNextInline($post, $src), $inline[$i] ?? null, 'Slika u tekstu '.($i + 1));
         }
+
+        $this->placeInline($post, $images, $data['inlineImages'] ?? [], $sources, $warnings);
+
+        // No cover: the article stays a draft (not on the site, Facebook or Instagram). Send the cover
+        // and publishedAt later with {"id": ...} to publish it.
+        if ($coverError !== null) {
+            return response()->json([
+                'message' => "Naslovna slika {$coverError} — članak NIJE objavljen, spremljen je kao draft (id {$post->id}).",
+                'status' => 'draft',
+                'scheduled' => false,
+                'id' => $post->id,
+                'warnings' => $warnings,
+                'images' => $sources,
+                'facebook' => ['status' => 'skipped', 'message' => 'Draft bez naslovne slike.'],
+                'instagram' => ['status' => 'skipped', 'message' => 'Draft bez naslovne slike.'],
+                'data' => new PostResource($post->refresh()->load('category')),
+            ], 202);
+        }
+
+        $post->update(['published_at' => $publishAt]);
 
         // After the images, so the Facebook preview has the cover. Never fails the publish.
         $facebook = ($data['shareToMeta'] ?? true)
@@ -133,6 +138,7 @@ class PublishController extends Controller
             'message' => $publishAt->isFuture()
                 ? 'Članak je zakazan za '.$publishAt->copy()->setTimezone(QuizGenerator::TIMEZONE)->format('d.m.Y. H:i').' (Sarajevo).'
                 : 'Članak je objavljen.',
+            'status' => $publishAt->isFuture() ? 'scheduled' : 'published',
             'publishedAt' => $publishAt->toIso8601String(),
             'scheduled' => $publishAt->isFuture(),
             'url' => MetaPublisher::articleUrl($post),
@@ -146,10 +152,11 @@ class PublishController extends Controller
 
     /**
      * Edits an existing article; only the fields that are sent change (slug and URL stay).
-     *   cover: data URL / https link, or true to redraw through OpenRouter
-     *   content: new body; its new "[[SLIKA: ...]]" markers are drawn, filled from inlineImages in order
-     *   replaceInline: [{"number": 1, "image"?: "...", "description"?: "..."}] replaces existing in-text images
-     * A supplied image that is rejected does not fall back to OpenRouter: the old one stays and a warning says so.
+     *   cover: data URL / https link of a real photograph
+     *   content: new body; its new "[[SLIKA: ...]]" markers are filled from inlineImages in order, the rest removed
+     *   replaceInline: [{"number": 1, "image": "...", "description"?: "..."}] replaces existing in-text images
+     *   publishedAt: applied only when the article has a cover; publishing a draft shares it like a new article
+     * A supplied image that is rejected leaves the old one in place and a warning says so. Nothing is drawn by AI.
      */
     private function updateArticle(Request $request, PostImageGenerator $images)
     {
@@ -162,13 +169,16 @@ class PublishController extends Controller
             'author' => ['sometimes', 'string', 'max:255'],
             'publishedAt' => ['sometimes', 'date'],
             'published_at' => ['sometimes', 'date'],
-            'cover' => ['sometimes', 'nullable'],
+            'cover' => ['sometimes', 'nullable', 'string'],
             'inlineImages' => ['sometimes', 'nullable', 'array', 'max:2'],
             'inlineImages.*' => ['nullable', 'string'],
             'replaceInline' => ['sometimes', 'array', 'max:2'],
             'replaceInline.*.number' => ['required', 'integer', 'min:1'],
-            'replaceInline.*.image' => ['nullable', 'string'],
+            'replaceInline.*.image' => ['required', 'string'],
             'replaceInline.*.description' => ['nullable', 'string', 'max:500'],
+            // Only used when this edit publishes a draft (see above).
+            'shareToMeta' => ['nullable', 'boolean'],
+            'shareToInstagram' => ['nullable', 'boolean'],
         ]);
         $post = Post::findOrFail($data['id']);
 
@@ -176,9 +186,11 @@ class PublishController extends Controller
         if (isset($data['category'])) {
             $fields['category_id'] = Category::where('slug', $data['category'])->value('id');
         }
-        if (isset($data['publishedAt']) || isset($data['published_at'])) {
-            $fields['published_at'] = Carbon::parse($data['publishedAt'] ?? $data['published_at']);
-        }
+        // Applied after the images: a post is published only once it has its cover.
+        $publishAt = isset($data['publishedAt']) || isset($data['published_at'])
+            ? Carbon::parse($data['publishedAt'] ?? $data['published_at'])
+            : null;
+        $wasDraft = $post->published_at === null;
         if (isset($data['content'])) {
             $content = PostImageGenerator::relativeContent(trim(str_replace("\r\n", "\n", $data['content'])));
             $words = PostContentGenerator::words(PostContentGenerator::textOnly($content));
@@ -190,9 +202,6 @@ class PublishController extends Controller
         }
 
         $cover = $data['cover'] ?? null;
-        if ($cover !== null && $cover !== true && ! is_string($cover)) {
-            return response()->json(['message' => 'Polje "cover" mora biti slika (data:image/... ili https link) ili true.'], 422);
-        }
 
         $changed = array_keys($fields);
         if ($fields) {
@@ -205,11 +214,11 @@ class PublishController extends Controller
         set_time_limit(300);
 
         $warnings = [];
-        $sources = ['agent' => 0, 'api' => 0];
-        $attempt = function (callable $store, ?string $supplied, string $label) use (&$warnings, &$sources, &$changed) {
+        $sources = ['agent' => 0];
+        $attempt = function (callable $store, string $label) use (&$warnings, &$sources, &$changed) {
             try {
-                $store($supplied);
-                $sources[$supplied !== null ? 'agent' : 'api']++;
+                $store();
+                $sources['agent']++;
                 $changed[] = $label;
             } catch (Throwable $exception) {
                 $warnings[] = "{$label} nije promijenjena: ".$exception->getMessage();
@@ -217,51 +226,82 @@ class PublishController extends Controller
         };
 
         if ($cover !== null) {
-            $attempt(fn (?string $src) => $images->generate($post, $src), is_string($cover) ? $cover : null, 'Naslovna slika');
+            $attempt(fn () => $images->generate($post, $cover), 'Naslovna slika');
         }
 
         foreach ($data['replaceInline'] ?? [] as $item) {
             $attempt(
-                fn (?string $src) => $images->replaceInline($post->refresh(), $item['number'], $src, $item['description'] ?? null),
-                $item['image'] ?? null,
+                fn () => $images->replaceInline($post->refresh(), $item['number'], $item['image'], $item['description'] ?? null),
                 "Slika u tekstu {$item['number']}",
             );
         }
 
-        // New markers in the body: supplied images in marker order, otherwise drawn through OpenRouter.
-        $inline = array_values($data['inlineImages'] ?? []);
-        for ($i = 0; $i < 2 && PostImageGenerator::pendingInline($post->refresh()) > 0; $i++) {
-            $supplied = $inline[$i] ?? null;
-            if ($supplied !== null) {
-                try {
-                    $images->generateNextInline($post, $supplied);
-                    $sources['agent']++;
+        // New markers in the body: supplied photos in marker order, markers without one removed.
+        $this->placeInline($post, $images, $data['inlineImages'] ?? [], $sources, $warnings);
 
-                    continue;
-                } catch (Throwable $exception) {
-                    $warnings[] = 'Nova slika u tekstu '.($i + 1).": poslana slika odbijena ({$exception->getMessage()}), generišem preko API-ja.";
+        $facebook = $instagram = null;
+        if ($publishAt !== null) {
+            if (empty($post->refresh()->image_url)) {
+                $warnings[] = 'Članak nema naslovnu sliku — publishedAt nije primijenjen, ostaje draft.';
+            } else {
+                $post->update(['published_at' => $publishAt]);
+                $changed[] = 'publishedAt';
+
+                // A draft published now (e.g. one saved without a cover) is shared then; edits are not re-shared.
+                if ($wasDraft) {
+                    $facebook = ($data['shareToMeta'] ?? true) && ! $post->meta_post_id
+                        ? app(MetaPublisher::class)->share($post)
+                        : ['status' => 'skipped', 'message' => 'shareToMeta: false'];
+                    if ($post->ig_status === null) {
+                        InstagramPublisher::queue($post, $data['shareToInstagram'] ?? true);
+                    }
+                    $instagram = ['status' => $post->ig_status === 'pending' ? 'pending' : 'skipped'];
                 }
             }
-            try {
-                $images->generateNextInline($post);
-                $sources['api']++;
-            } catch (Throwable $exception) {
-                $warnings[] = 'Nova slika u tekstu '.($i + 1).' nije generisana: '.$exception->getMessage();
-            }
         }
 
-        if (! $changed && ! $sources['agent'] && ! $sources['api']) {
-            return response()->json(['message' => 'Ništa nije promijenjeno.', 'warnings' => $warnings], $warnings ? 422 : 200);
+        $post->refresh();
+        $status = $post->published_at === null ? 'draft' : ($post->published_at->isFuture() ? 'scheduled' : 'published');
+
+        if (! $changed && ! $sources['agent']) {
+            return response()->json(['message' => 'Ništa nije promijenjeno.', 'status' => $status, 'warnings' => $warnings], $warnings ? 422 : 200);
         }
 
-        return response()->json([
+        return response()->json(array_filter([
             'message' => 'Članak je ažuriran.',
+            'status' => $status,
+            'scheduled' => $status === 'scheduled',
             'changed' => $changed,
             'url' => MetaPublisher::articleUrl($post),
             'warnings' => $warnings,
             'images' => $sources,
-            'data' => new PostResource($post->refresh()->load('category')),
-        ]);
+            'facebook' => $facebook,
+            'instagram' => $instagram,
+            'data' => new PostResource($post->load('category')),
+        ], fn ($value) => $value !== null));
+    }
+
+    /**
+     * Fills the body's "[[SLIKA: ...]]" markers in order with the supplied photos (a rejected one is
+     * skipped and the next photo tried), then removes the markers still left without a photo.
+     */
+    private function placeInline(Post $post, PostImageGenerator $images, array $supplied, array &$sources, array &$warnings): void
+    {
+        foreach (array_values(array_filter($supplied)) as $i => $source) {
+            if (PostImageGenerator::pendingInline($post->refresh()) === 0) {
+                break;
+            }
+            try {
+                $images->generateNextInline($post, $source);
+                $sources['agent']++;
+            } catch (Throwable $exception) {
+                $warnings[] = 'Slika u tekstu '.($i + 1).' odbijena: '.$exception->getMessage();
+            }
+        }
+
+        if ($dropped = PostImageGenerator::dropPendingInline($post->refresh())) {
+            $warnings[] = "Bez fotografije za {$dropped} [[SLIKA]] — uklonjeno iz teksta.";
+        }
     }
 
     private function quiz(Request $request, QuizGenerator $quizzes)
