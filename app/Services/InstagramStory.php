@@ -13,7 +13,7 @@ use RuntimeException;
  *  - story (1080x1920): also "Cijeli članak na geovizija.com / LINK U OPISU PROFILA" (the API cannot
  *    add link stickers), kept above Instagram's reply bar; saved under public/media/stories.
  *  - feed (1080x1350, 4:5): without those two lines; saved as the cover's -ig.jpg.
- *  - facebook (1080x1080, square): like feed, title in at most 3 lines; saved as the cover's -fbsq.jpg (og:image).
+ *  - facebook (1200x630): smaller, title in at most 2 lines; saved as the cover's -fbw.jpg (og:image).
  * Fonts: Merriweather (OFL) in resources/fonts.
  */
 class InstagramStory
@@ -55,13 +55,13 @@ class InstagramStory
 
     /**
      * The Facebook link image, saved next to the cover (PostImageGenerator::sharePath) and served to
-     * Facebook as og:image by og.php. Square 1080x1080: the most upright shape a link preview shows
-     * whole (taller images are cropped). Same design as the Instagram feed image, title at the top.
+     * Facebook as og:image by og.php. 1200x630: Facebook shows link previews only at 1.91:1 and centre-crops
+     * any other shape (a square lost its title), so this stays landscape.
      */
     public function facebook(Post $post): string
     {
         $path = PostImageGenerator::sharePath($post->image_url);
-        $this->card($post, 1080, 1080, 80, false, public_path($path), maxLines: 3, shadeFrom: 320, atTop: true);
+        $this->card($post, 1200, 630, 56, false, public_path($path), 0.8, 2, 420);
 
         return $path;
     }
