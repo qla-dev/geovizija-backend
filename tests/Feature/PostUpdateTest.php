@@ -30,7 +30,9 @@ class PostUpdateTest extends TestCase
             'services.publish.secret_hash' => Hash::make('tajna'),
             'services.admin.token' => 'admin-token',
         ]);
-        Http::fake();
+        Http::fake(fn ($request) => Http::response(($request['scrape'] ?? null) === 'true'
+            ? ['url' => $request['id'], 'image' => [['url' => 'https://geovizija.com/cover.jpg']]]
+            : []));
         $this->mock(ShareReadiness::class)->shouldReceive('check')->andReturn('https://geovizija.com/cover.jpg');
 
         $this->created = File::glob(public_path(PostImageGenerator::DIRECTORY.'/*'));

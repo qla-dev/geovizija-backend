@@ -102,7 +102,7 @@ class ShareGuardTest extends TestCase
                     ['Content-Type' => $this->fault['imageType'] ?? 'image/jpeg']);
             }
             if ($url === 'https://graph.facebook.com/v23.0/') {
-                return Http::response($this->fault['scrapeBody'] ?? ['id' => 'preview-id'], $this->fault['scrapeStatus'] ?? 200);
+                return Http::response($this->fault['scrapeBody'] ?? ['url' => self::URL, 'image' => [['url' => $shareUrl]]], $this->fault['scrapeStatus'] ?? 200);
             }
             if ($url === self::FEED) {
                 return Http::response(['id' => '123_456']);
@@ -151,6 +151,9 @@ class ShareGuardTest extends TestCase
             'image redirects elsewhere' => [['imageStatus' => 302]],
             'Facebook rejects refresh' => [['scrapeStatus' => 400, 'scrapeBody' => ['error' => ['message' => 'Scrape failed']]]],
             'Facebook gives an invalid refresh response' => [['scrapeBody' => []]],
+            'Facebook cached a different article' => [['scrapeBody' => ['url' => 'https://geovizija.com/article/wrong', 'image' => [['url' => self::COVER]]]]],
+            'Facebook cached a different image' => [['scrapeBody' => ['url' => self::URL, 'image' => [['url' => 'https://geovizija.com/old.jpg']]]]],
+            'Facebook found no image' => [['scrapeBody' => ['url' => self::URL, 'image' => []]]],
         ];
     }
 

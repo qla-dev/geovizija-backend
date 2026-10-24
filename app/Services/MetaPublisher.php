@@ -117,10 +117,14 @@ class MetaPublisher
             if (PostImageGenerator::isGenerated($post->image_url)) {
                 app(InstagramStory::class)->facebook($post);
             }
-            app(ShareReadiness::class)->check($post);
+            $image = app(ShareReadiness::class)->check($post);
             $response = Http::asForm()->timeout(20)->post($this->graph(''), ['id' => self::articleUrl($post), 'scrape' => 'true', 'access_token' => config('services.meta.page_token')]);
-            if (! $response->successful() || ! $response->json('id')) {
+            if (! $response->successful()) {
                 throw new \RuntimeException('Facebook nije potvrdio osvježavanje pregleda: '.($response->json('error.error_user_msg') ?? $response->json('error.message') ?? "HTTP {$response->status()}"));
+            }
+            if ($response->json('url') !== self::articleUrl($post)
+                || array_column((array) $response->json('image'), 'url') !== [$image]) {
+                throw new \RuntimeException('Facebook je vratio pogrešan link ili naslovnu sliku.');
             }
         } catch (Throwable $exception) {
             $error = 'Dijeljenje zaustavljeno: '.$exception->getMessage();

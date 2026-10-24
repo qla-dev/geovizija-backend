@@ -35,7 +35,11 @@ class MetaShareTest extends TestCase
     /** Facebook answers with this unless a test fakes its own response first. */
     private function fakeFacebook(): void
     {
-        Http::fake(['graph.facebook.com/*' => Http::response(['id' => '123_456'])]);
+        Http::fake(['graph.facebook.com/*' => fn (Request $request) => Http::response(
+            ($request['scrape'] ?? null) === 'true'
+                ? ['url' => $request['id'], 'image' => [['url' => 'https://geovizija.com/cover.jpg']]]
+                : ['id' => '123_456'],
+        )]);
     }
 
     private function article(array $attributes = []): Post
