@@ -50,6 +50,8 @@ The admin API rejects slug changes after an article has a Facebook post or `meta
 
 The successful Facebook scrape response must contain the exact article `url` and a single `image[].url` matching the verified preview image. The scrape endpoint does not return a post `id`; that field belongs to the subsequent Page feed response.
 
+Missing historical generated cover URLs under `/media/posts` are resolved by `LegacyPostImageController` to the same article's current cover/social variant. Existing files stay untouched. This repairs Facebook attachments whose old images were already deleted; unknown articles, drafts, missing current variants, and inline-image filenames remain 404.
+
 `App\Services\MetaPublisher` shares each new article on the Geovizija Facebook Page through the Graph API (`/{page}/feed`). It is off until `META_PAGE_ID` and `META_PAGE_TOKEN` (a long-lived Page access token with `pages_manage_posts` and `pages_read_engagement`) are set in the server `.env`, then `config:cache` (the backend redeploy does it).
 
 - Hooks: `/api/publish` (after the images), admin `POST /api/posts`, and admin `PATCH /api/posts/{id}` when it first gives a draft a `published_at`. Drafts are never shared; other edits are not re-shared. `shareToMeta: false` in the publish JSON opts out.
