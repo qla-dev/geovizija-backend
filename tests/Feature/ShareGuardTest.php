@@ -58,11 +58,12 @@ class ShareGuardTest extends TestCase
         Http::preventStrayRequests();
         Http::fake(function (Request $request) {
             $url = $request->url();
-            $coverUrl = (new PostResource($this->post))->resolve()['imageUrl'];
             $generated = PostImageGenerator::isGenerated($this->post->image_url);
-            $shareUrl = $generated ? asset(PostImageGenerator::sharePath($this->post->image_url)) : $coverUrl;
+            $coverUrl = $generated ? 'https://geovizija.com/endpoints/'.$this->post->image_url : $this->post->image_url;
+            $shareUrl = $generated ? 'https://geovizija.com/endpoints/'.PostImageGenerator::sharePath($this->post->image_url) : $coverUrl;
             if ($url === self::API.'/preview' || $url === self::API) {
                 $data = (new PostResource($this->post->load('category')))->resolve();
+                $data['imageUrl'] = $coverUrl;
                 $data['shareImageUrl'] = $shareUrl;
                 if ($url === self::API.'/preview') {
                     $data = array_replace($data, $this->fault['preview'] ?? []);
@@ -220,6 +221,21 @@ class ShareGuardTest extends TestCase
             $this->assertSame('failed', $result['status']);
             $this->assertStringContainsString('razlikuje', $result['message']);
             Http::assertNotSent(fn (Request $r) => $r->url() === self::FEED);
+        } finally {
+            File::delete([public_path($path), public_path(PostImageGenerator::sharePath($path)),
+                public_path(PostImageGenerator::portraitPath($path)), PostImageGenerator::originalPath($path)]);
+        }
+    }
+
+    public function test_cli_sharing_checks_public_media_instead_of_localhost(): void
+    {
+        $path = app(PostImageGenerator::class)->generate($this->post, 'data:image/jpeg;base64,'.base64_encode($this->jpeg));
+        try {
+            URL::forceRootUrl('http://localhost');
+            URL::forceScheme('http');
+
+            $this->assertSame('posted', app(MetaPublisher::class)->share($this->post)['status']);
+            Http::assertNotSent(fn (Request $r) => str_contains($r->url(), 'localhost'));
         } finally {
             File::delete([public_path($path), public_path(PostImageGenerator::sharePath($path)),
                 public_path(PostImageGenerator::portraitPath($path)), PostImageGenerator::originalPath($path)]);

@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Http\Resources\PostResource;
 use App\Models\Post;
 use DOMDocument;
 use DOMXPath;
@@ -20,10 +19,12 @@ class ShareReadiness
         }
 
         $url = MetaPublisher::articleUrl($post);
-        $api = rtrim((string) config('services.meta.media_url'), '/').'/api/posts/'.rawurlencode($post->slug);
-        $cover = (new PostResource($post->loadMissing('category')))->resolve()['imageUrl'];
+        $publicBase = rtrim((string) config('services.meta.media_url'), '/');
+        $api = $publicBase.'/api/posts/'.rawurlencode($post->slug);
         $generated = PostImageGenerator::isGenerated($post->image_url);
-        $image = $generated ? asset(PostImageGenerator::sharePath($post->image_url)) : $cover;
+        // A CLI run's APP_URL can be localhost; verify the actual public media host instead.
+        $cover = $generated ? $publicBase.'/'.$post->image_url : $post->image_url;
+        $image = $generated ? $publicBase.'/'.PostImageGenerator::sharePath($post->image_url) : $cover;
         $preview = $this->get($api.'/preview')->json('data');
 
         if (! is_array($preview) || (string) ($preview['id'] ?? '') !== (string) $post->id
