@@ -47,6 +47,15 @@ class PostImageGenerator
         $previous = $post->image_url;
         $post->update(['image_url' => $path]);
 
+        $this->finishCover($post, $previous);
+
+        return $path;
+    }
+
+    private function finishCover(Post $post, ?string $previous): void
+    {
+        $path = $post->image_url;
+
         // The Instagram feed and Facebook link images (InstagramStory), drawn again when shared.
         try {
             app(InstagramStory::class)->feed($post);
@@ -55,12 +64,16 @@ class PostImageGenerator
             Log::warning("Social images for post {$post->id} not drawn: {$exception->getMessage()}");
         }
 
-        // Remove the image this one replaces, but only if it was one of ours.
-        if ($previous && str_starts_with($previous, self::DIRECTORY.'/') && $previous !== $path) {
+        // Facebook attachments keep their original image URL after a cover changes.
+        // Keep that cover and its social versions available for existing Page posts.
+        if ($previous && str_starts_with($previous, self::DIRECTORY.'/') && $previous !== $path && ! $post->meta_post_id) {
             self::deleteCover($previous);
         }
 
-        return $path;
+        // All cover replacement entry points (including /publish) refresh the link preview.
+        if ($post->meta_post_id) {
+            app(MetaPublisher::class)->refreshPreview($post);
+        }
     }
 
     /**
@@ -153,7 +166,7 @@ class PostImageGenerator
         $previousCover = $post->image_url;
         $post->update(array_filter(['image_url' => $cover, 'content' => $old ? $content : null]));
         if ($cover) {
-            File::delete(public_path($previousCover));
+            $this->finishCover($post, $previousCover);
         }
         foreach ($old as $path) {
             File::delete(public_path($path));
@@ -293,6 +306,10 @@ class PostImageGenerator
         $image = self::toJpeg($image);
         $mark = $image['bytes'] !== $original ? self::PROCESSED_MARK : '';
         $path = self::DIRECTORY.'/'.$basename.'-'.now()->format('YmdHis').$mark.'.'.$image['extension'];
+        // A second replacement in the same second must not overwrite an image already shared.
+        if (File::exists(public_path($path))) {
+            $path = self::DIRECTORY.'/'.$basename.'-'.now()->format('YmdHis').'-'.bin2hex(random_bytes(4)).$mark.'.'.$image['extension'];
+        }
         File::ensureDirectoryExists(public_path(self::DIRECTORY));
         File::put(public_path($path), $image['bytes']);
 

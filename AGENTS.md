@@ -42,6 +42,12 @@ Generated text can contain inaccurate specifics; the prompt forbids invented quo
 
 # Facebook sharing
 
+Replacing a cover on an article with `meta_post_id` preserves the old cover and social image files: existing Facebook attachments can still request their original URLs. Every cover replacement through `PostImageGenerator::generate` also requests a preview refresh without creating a new Page post.
+
+Sharing fails closed: `ShareReadiness` verifies the public article API (preview only for scheduled articles), the deployed frontend's `geovizija:article-loader=direct-api-v1` contract, crawler metadata for the exact article/canonical URL/current cover, and downloadable real images. Stored images must also match the public bytes. Facebook must confirm the scrape before a Page post is created. Failures are stored in `meta_error` and returned as `facebook.status=failed`; never bypass this gate or force a re-share to work around a failed check. Deploy the frontend before the backend when introducing or changing this contract. Image reprocessing also preserves covers referenced by existing Facebook posts; same-second replacements use distinct filenames.
+
+The admin API rejects slug changes after an article has a Facebook post or `meta_shared_at`, so previously shared article URLs remain stable.
+
 `App\Services\MetaPublisher` shares each new article on the Geovizija Facebook Page through the Graph API (`/{page}/feed`). It is off until `META_PAGE_ID` and `META_PAGE_TOKEN` (a long-lived Page access token with `pages_manage_posts` and `pages_read_engagement`) are set in the server `.env`, then `config:cache` (the backend redeploy does it).
 
 - Hooks: `/api/publish` (after the images), admin `POST /api/posts`, and admin `PATCH /api/posts/{id}` when it first gives a draft a `published_at`. Drafts are never shared; other edits are not re-shared. `shareToMeta: false` in the publish JSON opts out.

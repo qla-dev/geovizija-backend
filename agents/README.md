@@ -27,6 +27,8 @@ Once the images are done, a new article is also shared on the Geovizija Facebook
 
 ### Editing an existing article
 
+Facebook sharing is blocked if public link/image verification or Facebook's preview refresh fails. Read `facebook.status` and `facebook.message`; report the failure and fix the cause before retrying. Do not bypass validation or force a replacement Page post to work around a broken link or cover. Replacing a cover preserves image URLs used by existing Page posts; image update responses also report preview refresh failures.
+
 Add `"id"` (the post id, `data.id` in the publish response or from `GET /posts/{slug}`) and send only what changes; everything else, including the slug and URL, stays:
 
 ```json

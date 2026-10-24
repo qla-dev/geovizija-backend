@@ -54,7 +54,7 @@ class PostController extends Controller
         $data['slug'] ??= $this->uniqueSlug($data['title']);
         $data['featured'] ??= false;
         $data['author'] ??= self::DEFAULT_AUTHOR;
-        $data['read_time'] ??=max(1, (int) ceil(str_word_count(strip_tags($data['content'])) / 200));
+        $data['read_time'] ??= max(1, (int) ceil(str_word_count(strip_tags($data['content'])) / 200));
         // Never published without a cover: such a post stays a draft until it gets one.
         if (empty($data['image_url'])) {
             $data['published_at'] = null;
@@ -134,7 +134,9 @@ class PostController extends Controller
             default => null,
         };
         if (! $wasScheduled && $post->meta_post_id && ($post->wasChanged(['title', 'excerpt', 'image_url']) || $request->boolean('cover_changed'))) {
-            $meta->refreshPreview($post);
+            if (($error = $meta->refreshPreview($post)) !== null) {
+                $facebook = ['status' => 'failed', 'message' => $error];
+            }
         }
         if ($post->wasChanged('published_at') && $post->published_at && $post->ig_status === null) {
             InstagramPublisher::queue($post);
@@ -237,7 +239,11 @@ class PostController extends Controller
             return response()->json(['message' => $exception->getMessage()], 422);
         }
 
-        return new PostResource($post->refresh()->load('category'));
+        $post->refresh()->load('category');
+
+        return (new PostResource($post))->additional($post->meta_post_id && $post->meta_error
+            ? ['facebook' => ['status' => 'failed', 'message' => $post->meta_error]]
+            : []);
     }
 
     /**
@@ -302,7 +308,8 @@ class PostController extends Controller
         $data = $request->validate([
             'category' => [$required, 'string', Rule::exists('categories', 'slug')],
             'title' => [$required, 'string', 'max:255'],
-            'slug' => ['sometimes', 'string', 'max:255', 'alpha_dash', Rule::unique('posts')->ignore($post)],
+            'slug' => ['sometimes', 'string', 'max:255', 'alpha_dash', Rule::unique('posts')->ignore($post),
+                Rule::when($post?->meta_post_id || $post?->meta_shared_at, Rule::in([$post?->slug]))],
             'excerpt' => ['nullable', 'string'],
             'content' => [$required, 'string'],
             'image_url' => ['nullable', 'url', 'max:2048'],

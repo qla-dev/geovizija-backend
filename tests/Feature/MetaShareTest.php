@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Category;
 use App\Models\Post;
 use App\Services\MetaPublisher;
+use App\Services\ShareReadiness;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
@@ -27,6 +28,8 @@ class MetaShareTest extends TestCase
             'services.meta.site_url' => 'https://geovizija.com',
         ]);
         Category::create(['slug' => 'priroda', 'name' => 'Priroda', 'color' => 'bg-green-500']);
+        // These tests exercise Meta's lifecycle; ShareGuardTest exercises public validation.
+        $this->mock(ShareReadiness::class)->shouldReceive('check')->andReturn('https://geovizija.com/cover.jpg');
     }
 
     /** Facebook answers with this unless a test fakes its own response first. */
@@ -40,7 +43,7 @@ class MetaShareTest extends TestCase
         return Post::create($attributes + [
             'category_id' => Category::value('id'), 'slug' => 'berat-grad', 'title' => 'Berat, grad hiljadu prozora',
             'excerpt' => 'Kratki uvod.', 'content' => 'Tekst', 'author' => 'A', 'read_time' => 1,
-            'image_url' => 'media/posts/berat.jpg', 'published_at' => now()->subMinute(),
+            'image_url' => asset('media/posts/berat.jpg'), 'published_at' => now()->subMinute(),
         ]);
     }
 
@@ -117,6 +120,18 @@ class MetaShareTest extends TestCase
         config(['services.meta.page_token' => null]);
 
         $this->assertSame('skipped', app(MetaPublisher::class)->share($this->article())['status']);
+        Http::assertNothingSent();
+    }
+
+    public function test_an_article_url_cannot_be_changed_after_it_has_been_shared(): void
+    {
+        $this->fakeFacebook();
+        $post = $this->article();
+        $post->forceFill(['meta_post_id' => '123_456', 'meta_shared_at' => now()])->save();
+
+        $this->withToken('admin-token')->patchJson("/api/posts/{$post->id}", ['slug' => 'broken-old-link'])
+            ->assertUnprocessable()->assertJsonValidationErrors('slug');
+        $this->assertSame('berat-grad', $post->refresh()->slug);
         Http::assertNothingSent();
     }
 

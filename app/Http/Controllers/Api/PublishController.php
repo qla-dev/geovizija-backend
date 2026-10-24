@@ -9,8 +9,8 @@ use App\Models\Post;
 use App\Models\Quiz;
 use App\Models\Suggestion;
 use App\Services\InstagramPublisher;
-use App\Services\PostContentGenerator;
 use App\Services\MetaPublisher;
+use App\Services\PostContentGenerator;
 use App\Services\PostImageGenerator;
 use App\Services\QuizGenerator;
 use Illuminate\Http\Request;
@@ -265,6 +265,10 @@ class PublishController extends Controller
 
         $post->refresh();
         $status = $post->published_at === null ? 'draft' : ($post->published_at->isFuture() ? 'scheduled' : 'published');
+
+        if ($post->meta_post_id && $post->meta_error) {
+            $facebook = ['status' => 'failed', 'message' => $post->meta_error];
+        }
 
         if (! $changed && ! $sources['agent']) {
             return response()->json(['message' => 'Ništa nije promijenjeno.', 'status' => $status, 'warnings' => $warnings], $warnings ? 422 : 200);

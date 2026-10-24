@@ -70,7 +70,9 @@ class MetaPublisher
             $params['scheduled_publish_time'] = $scheduledFor->getTimestamp();
         }
 
-        $this->refreshPreview($post);
+        if (($error = $this->refreshPreview($post)) !== null) {
+            return ['status' => 'failed', 'message' => $error];
+        }
 
         try {
             $response = Http::asForm()->timeout(30)->post($this->endpoint(), $params);
@@ -106,23 +108,32 @@ class MetaPublisher
      * Redraws the link image with the current title, then lets Facebook re-read the preview (it keeps
      * one for weeks) so a new cover or title shows, also under an already published Page post.
      */
-    public function refreshPreview(Post $post): void
+    public function refreshPreview(Post $post): ?string
     {
         if (! self::configured()) {
-            return;
-        }
-        if (PostImageGenerator::isGenerated($post->image_url)) {
-            try {
-                app(InstagramStory::class)->facebook($post);
-            } catch (Throwable $exception) {
-                Log::warning("Facebook image for post {$post->id} not drawn: {$exception->getMessage()}");
-            }
+            return null;
         }
         try {
-            Http::asForm()->timeout(20)->post($this->graph(''), ['id' => self::articleUrl($post), 'scrape' => 'true', 'access_token' => config('services.meta.page_token')]);
-        } catch (Throwable) {
-            // A share still goes out, with whatever preview Facebook has.
+            if (PostImageGenerator::isGenerated($post->image_url)) {
+                app(InstagramStory::class)->facebook($post);
+            }
+            app(ShareReadiness::class)->check($post);
+            $response = Http::asForm()->timeout(20)->post($this->graph(''), ['id' => self::articleUrl($post), 'scrape' => 'true', 'access_token' => config('services.meta.page_token')]);
+            if (! $response->successful() || ! $response->json('id')) {
+                throw new \RuntimeException('Facebook nije potvrdio osvježavanje pregleda: '.($response->json('error.error_user_msg') ?? $response->json('error.message') ?? "HTTP {$response->status()}"));
+            }
+        } catch (Throwable $exception) {
+            $error = 'Dijeljenje zaustavljeno: '.$exception->getMessage();
+            $this->fail($post, $error);
+
+            return $error;
         }
+
+        if ($post->meta_post_id && $post->meta_error) {
+            $post->forceFill(['meta_error' => null])->save();
+        }
+
+        return null;
     }
 
     /** Removes the article's Page post (scheduled or live): back to draft, paused or deleted. */

@@ -27,6 +27,8 @@ Goal: a short magazine article with a cover image and two in-text images, publis
 
 If an image call fails, retry it once. If it still fails, leave the post as a draft and report it; do not publish an article without its cover.
 
+Facebook shares are allowed only after the backend verifies the public article link, exact preview metadata and current image, and Facebook confirms its preview refresh. A failed check returns `facebook.status: failed` with the reason and creates no new Page post. Report it and fix the cause before retrying; never bypass the check or use a forced re-share as a workaround.
+
 ## Body format
 
 One block per line, blocks separated by a blank line:

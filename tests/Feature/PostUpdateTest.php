@@ -5,10 +5,12 @@ namespace Tests\Feature;
 use App\Models\Category;
 use App\Models\Post;
 use App\Services\PostImageGenerator;
+use App\Services\ShareReadiness;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 class PostUpdateTest extends TestCase
@@ -29,6 +31,7 @@ class PostUpdateTest extends TestCase
             'services.admin.token' => 'admin-token',
         ]);
         Http::fake();
+        $this->mock(ShareReadiness::class)->shouldReceive('check')->andReturn('https://geovizija.com/cover.jpg');
 
         $this->created = File::glob(public_path(PostImageGenerator::DIRECTORY.'/*'));
     }
@@ -108,6 +111,101 @@ class PostUpdateTest extends TestCase
         }
     }
 
+    public function test_replacing_a_shared_cover_keeps_facebooks_image_and_refreshes_without_reposting(): void
+    {
+        config([
+            'services.meta.page_id' => '123',
+            'services.meta.page_token' => 'page-token',
+            'services.meta.graph_version' => 'v23.0',
+            'services.meta.site_url' => 'https://geovizija.com',
+        ]);
+        $post = $this->article();
+        $post->forceFill(['meta_post_id' => '123_456'])->save();
+        $oldCover = $post->image_url;
+        $oldShare = PostImageGenerator::sharePath($oldCover);
+        $this->assertFileExists(public_path($oldShare));
+        $this->travel(2)->seconds();
+
+        $this->postJson('/api/publish', [
+            'secret' => 'tajna', 'type' => 'article', 'id' => $post->id, 'cover' => self::PNG,
+        ])->assertOk();
+
+        $this->assertNotSame($oldCover, $post->refresh()->image_url);
+        $this->assertFileExists(public_path($oldCover));
+        $this->assertFileExists(public_path($oldShare));
+        $this->assertSame('123_456', $post->meta_post_id);
+        Http::assertSentCount(1);
+        Http::assertSent(fn ($request) => $request->url() === 'https://graph.facebook.com/v23.0/'
+            && $request['id'] === 'https://geovizija.com/article/test'
+            && $request['scrape'] === 'true');
+    }
+
+    public function test_admin_cover_replacement_also_keeps_the_shared_image_and_refreshes(): void
+    {
+        config([
+            'services.meta.page_id' => '123',
+            'services.meta.page_token' => 'page-token',
+            'services.meta.graph_version' => 'v23.0',
+        ]);
+        $post = $this->article();
+        $post->forceFill(['meta_post_id' => '123_456'])->save();
+        $oldShare = PostImageGenerator::sharePath($post->image_url);
+        $this->travel(2)->seconds();
+
+        $this->withToken('admin-token')->postJson("/api/posts/{$post->id}/generate-image", ['image' => self::PNG])
+            ->assertOk();
+
+        $this->assertFileExists(public_path($oldShare));
+        Http::assertSentCount(1);
+        Http::assertSent(fn ($request) => $request['scrape'] === 'true');
+    }
+
+    public function test_replacements_in_the_same_second_do_not_overwrite_a_shared_cover(): void
+    {
+        $this->freezeTime();
+        $post = $this->article();
+        $post->forceFill(['meta_post_id' => '123_456'])->save();
+        $previous = $post->image_url;
+        $share = PostImageGenerator::sharePath($previous);
+        $hash = hash_file('sha256', public_path($share));
+
+        app(PostImageGenerator::class)->generate($post, self::PNG);
+
+        $this->assertNotSame($previous, $post->refresh()->image_url);
+        $this->assertFileExists(public_path($previous));
+        $this->assertSame($hash, hash_file('sha256', public_path($share)));
+    }
+
+    public function test_cover_update_reports_a_failed_preview_check_without_deleting_the_old_cover(): void
+    {
+        config(['services.meta.page_id' => '123', 'services.meta.page_token' => 'test-token']);
+        $post = $this->article();
+        $post->forceFill(['meta_post_id' => '123_456'])->save();
+        $previous = $post->image_url;
+        $this->mock(ShareReadiness::class)->shouldReceive('check')->andThrow(new \RuntimeException('Public image missing'));
+
+        $this->withToken('admin-token')->postJson("/api/posts/{$post->id}/generate-image", ['image' => self::PNG])
+            ->assertOk()->assertJsonPath('facebook.status', 'failed');
+
+        $this->assertFileExists(public_path($previous));
+        $this->assertStringContainsString('Public image missing', $post->refresh()->meta_error);
+        Http::assertNothingSent();
+    }
+
+    public function test_reprocessing_preserves_cover_urls_used_by_facebook(): void
+    {
+        $post = $this->article();
+        $old = 'media/posts/reprocess-shared-20260101000000.jpg';
+        File::copy(public_path($post->image_url), public_path($old));
+        $post->forceFill(['image_url' => $old, 'meta_post_id' => '123_456'])->save();
+
+        app(PostImageGenerator::class)->reprocess($post);
+
+        $this->assertNotSame($old, $post->refresh()->image_url);
+        $this->assertFileExists(public_path($old));
+        $this->assertFileExists(public_path(PostImageGenerator::sharePath($post->image_url)));
+    }
+
     public function test_rejected_image_keeps_the_old_one_and_wrong_secret_changes_nothing(): void
     {
         $post = $this->article();
@@ -122,7 +220,7 @@ class PostUpdateTest extends TestCase
         $this->assertSame('Test', $post->title);
     }
 
-    private function newArticle(array $extra = []): \Illuminate\Testing\TestResponse
+    private function newArticle(array $extra = []): TestResponse
     {
         Category::firstOrCreate(['slug' => 'priroda'], ['name' => 'Priroda']);
         $body = str_repeat('Riječ ', 200)."\n\n[[SLIKA: Prva scena]]\n\n## Podnaslov\n\n[[SLIKA: Druga scena]]\n\n".str_repeat('Kraj ', 50);
@@ -144,7 +242,7 @@ class PostUpdateTest extends TestCase
         $this->assertNotNull($post->image_url);
         $this->assertCount(1, PostImageGenerator::inlinePaths($post->content));
         $this->assertSame(0, PostImageGenerator::pendingInline($post));
-        Http::assertNotSent(fn ($request) => str_contains($request->url(), "openrouter"));
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'openrouter'));
     }
 
     public function test_article_without_usable_cover_stays_draft_until_published_with_one(): void
@@ -165,7 +263,7 @@ class PostUpdateTest extends TestCase
         $this->postJson('/api/publish', ['secret' => 'tajna', 'type' => 'article', 'id' => $post->id, 'cover' => self::PNG, 'publishedAt' => $when])
             ->assertOk()->assertJsonPath('status', 'scheduled');
         $this->assertNotNull($post->refresh()->published_at);
-        Http::assertNotSent(fn ($request) => str_contains($request->url(), "openrouter"));
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'openrouter'));
     }
 
     public function test_admin_cannot_publish_a_post_without_cover(): void
@@ -195,6 +293,6 @@ class PostUpdateTest extends TestCase
         $this->postJson("/api/posts/{$post->id}/generate-inline-image", ['number' => 3, 'image' => self::PNG], $headers)->assertStatus(422);
         // Nothing is drawn: without an image the request is refused.
         $this->postJson("/api/posts/{$post->id}/generate-image", [], $headers)->assertStatus(422);
-        Http::assertNotSent(fn ($request) => str_contains($request->url(), "openrouter"));
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'openrouter'));
     }
 }
