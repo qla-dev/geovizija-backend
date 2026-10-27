@@ -65,6 +65,10 @@ class PublishController extends Controller
             'cover' => ['nullable', 'string'],
             'inlineImages' => ['nullable', 'array', 'max:2'],
             'inlineImages.*' => ['nullable', 'string'],
+            // Photo credits shown as text under the images (inlineCredits in inlineImages order).
+            'coverCredit' => ['nullable', 'string', 'max:300'],
+            'inlineCredits' => ['nullable', 'array', 'max:2'],
+            'inlineCredits.*' => ['nullable', 'string', 'max:300'],
             // false keeps the article off the Facebook Page (default: shared once images are done).
             'shareToMeta' => ['nullable', 'boolean'],
             // false keeps it off Instagram (default: posted there at publishedAt by instagram:publish-due).
@@ -101,14 +105,14 @@ class PublishController extends Controller
         $coverError = empty($data['cover']) ? 'nije poslana' : null;
         if ($coverError === null) {
             try {
-                $images->generate($post, $data['cover']);
+                $images->generate($post, $data['cover'], $data['coverCredit'] ?? null);
                 $sources['agent']++;
             } catch (Throwable $exception) {
                 $coverError = 'odbijena: '.$exception->getMessage();
             }
         }
 
-        $this->placeInline($post, $images, $data['inlineImages'] ?? [], $sources, $warnings);
+        $this->placeInline($post, $images, $data['inlineImages'] ?? [], $data['inlineCredits'] ?? [], $sources, $warnings);
 
         // No cover: the article stays a draft (not on the site, Facebook or Instagram). Send the cover
         // and publishedAt later with {"id": ...} to publish it.
@@ -175,10 +179,14 @@ class PublishController extends Controller
             'cover' => ['sometimes', 'nullable', 'string'],
             'inlineImages' => ['sometimes', 'nullable', 'array', 'max:2'],
             'inlineImages.*' => ['nullable', 'string'],
+            'coverCredit' => ['sometimes', 'nullable', 'string', 'max:300'],
+            'inlineCredits' => ['sometimes', 'nullable', 'array', 'max:2'],
+            'inlineCredits.*' => ['nullable', 'string', 'max:300'],
             'replaceInline' => ['sometimes', 'array', 'max:2'],
             'replaceInline.*.number' => ['required', 'integer', 'min:1'],
             'replaceInline.*.image' => ['required', 'string'],
             'replaceInline.*.description' => ['nullable', 'string', 'max:500'],
+            'replaceInline.*.credit' => ['nullable', 'string', 'max:300'],
             // Only used when this edit publishes a draft (see above).
             'shareToMeta' => ['nullable', 'boolean'],
             'shareToInstagram' => ['nullable', 'boolean'],
@@ -229,18 +237,18 @@ class PublishController extends Controller
         };
 
         if ($cover !== null) {
-            $attempt(fn () => $images->generate($post, $cover), 'Naslovna slika');
+            $attempt(fn () => $images->generate($post, $cover, $data['coverCredit'] ?? null), 'Naslovna slika');
         }
 
         foreach ($data['replaceInline'] ?? [] as $item) {
             $attempt(
-                fn () => $images->replaceInline($post->refresh(), $item['number'], $item['image'], $item['description'] ?? null),
+                fn () => $images->replaceInline($post->refresh(), $item['number'], $item['image'], $item['description'] ?? null, $item['credit'] ?? null),
                 "Slika u tekstu {$item['number']}",
             );
         }
 
         // New markers in the body: supplied photos in marker order, markers without one removed.
-        $this->placeInline($post, $images, $data['inlineImages'] ?? [], $sources, $warnings);
+        $this->placeInline($post, $images, $data['inlineImages'] ?? [], $data['inlineCredits'] ?? [], $sources, $warnings);
 
         $facebook = $instagram = null;
         if ($publishAt !== null) {
@@ -291,15 +299,20 @@ class PublishController extends Controller
     /**
      * Fills the body's "[[SLIKA: ...]]" markers in order with the supplied photos (a rejected one is
      * skipped and the next photo tried), then removes the markers still left without a photo.
+     * $credits[i] is the photo credit of $supplied[i].
      */
-    private function placeInline(Post $post, PostImageGenerator $images, array $supplied, array &$sources, array &$warnings): void
+    private function placeInline(Post $post, PostImageGenerator $images, array $supplied, array $credits, array &$sources, array &$warnings): void
     {
-        foreach (array_values(array_filter($supplied)) as $i => $source) {
+        $credits = array_values($credits);
+        foreach (array_values($supplied) as $i => $source) {
+            if (! $source) {
+                continue;
+            }
             if (PostImageGenerator::pendingInline($post->refresh()) === 0) {
                 break;
             }
             try {
-                $images->generateNextInline($post, $source);
+                $images->generateNextInline($post, $source, $credits[$i] ?? null);
                 $sources['agent']++;
             } catch (Throwable $exception) {
                 $warnings[] = 'Slika u tekstu '.($i + 1).' odbijena: '.$exception->getMessage();

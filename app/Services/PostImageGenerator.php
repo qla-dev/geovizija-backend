@@ -39,13 +39,16 @@ class PostImageGenerator
     /** Originals of saved images, under storage/ (see originalPath). */
     private const ORIGINALS = 'app/originals';
 
-    /** Stores the supplied $source (data URL or https link) as the post's cover (image_url). */
-    public function generate(Post $post, string $source): string
+    /**
+     * Stores the supplied $source (data URL or https link) as the post's cover (image_url);
+     * $credit is the photo credit shown under it (e.g. "Foto: Autor / Wikimedia Commons, CC BY-SA 4.0").
+     */
+    public function generate(Post $post, string $source, ?string $credit = null): string
     {
         $path = $this->save($this->fetchSource($source), $post->slug);
 
         $previous = $post->image_url;
-        $post->update(['image_url' => $path]);
+        $post->update(['image_url' => $path, 'image_credits' => self::credits($post, $path, $credit, $previous)]);
 
         $this->finishCover($post, $previous);
 
@@ -80,7 +83,7 @@ class PostImageGenerator
      * Stores the supplied $source for the first "[[SLIKA: ...]]" marker in the body and replaces the
      * marker with "![description](media/posts/...)". Returns null when no marker is left.
      */
-    public function generateNextInline(Post $post, string $source): ?string
+    public function generateNextInline(Post $post, string $source, ?string $credit = null): ?string
     {
         if (! preg_match(self::INLINE_MARKER, $post->content, $match)) {
             return null;
@@ -91,7 +94,10 @@ class PostImageGenerator
         $path = $this->save($this->fetchSource($source), "{$post->slug}-inline-{$number}");
 
         $caption = str_replace([']', '['], '', $description);
-        $post->update(['content' => preg_replace(self::INLINE_MARKER, "![{$caption}]({$path})", $post->content, 1)]);
+        $post->update([
+            'content' => preg_replace(self::INLINE_MARKER, "![{$caption}]({$path})", $post->content, 1),
+            'image_credits' => self::credits($post, $path, $credit),
+        ]);
 
         return $path;
     }
@@ -101,7 +107,7 @@ class PostImageGenerator
      * $source; the caption becomes $description when given. The old file is deleted only after the
      * new one is stored, so a failure leaves the article unchanged.
      */
-    public function replaceInline(Post $post, int $number, string $source, ?string $description = null): string
+    public function replaceInline(Post $post, int $number, string $source, ?string $description = null, ?string $credit = null): string
     {
         $images = self::inlineImages((string) $post->content);
         if (! isset($images[$number - 1])) {
@@ -113,13 +119,35 @@ class PostImageGenerator
         $path = $this->save($this->fetchSource($source), "{$post->slug}-inline-{$number}");
 
         $caption = str_replace([']', '['], '', $description);
-        $post->update(['content' => str_replace($tag, "![{$caption}]({$path})", $post->content)]);
+        $post->update([
+            'content' => str_replace($tag, "![{$caption}]({$path})", $post->content),
+            'image_credits' => self::credits($post, $path, $credit, $previous),
+        ]);
 
         if ($previous !== $path) {
             File::delete(public_path($previous));
         }
 
         return $path;
+    }
+
+    /**
+     * The post's photo credits with $path credited as $credit (none when empty) and the replaced
+     * $previous image's credit dropped. Kept to at most 300 characters of plain text.
+     */
+    private static function credits(Post $post, string $path, ?string $credit, ?string $previous = null): ?array
+    {
+        $credits = $post->image_credits ?? [];
+        unset($credits[$path]);
+        if ($previous !== null) {
+            unset($credits[$previous]);
+        }
+        $credit = trim(strip_tags((string) $credit));
+        if ($credit !== '') {
+            $credits[$path] = mb_substr($credit, 0, 300);
+        }
+
+        return $credits ?: null;
     }
 
     /** Whether a stored path is one of ours from before toJpeg() cropped and watermarked images. */
@@ -154,17 +182,26 @@ class PostImageGenerator
         };
 
         $cover = self::needsReprocess($post->image_url) ? $rewrite($post->image_url) : null;
+        $credits = $post->image_credits ?? [];
+        if ($cover && isset($credits[$post->image_url])) {
+            $credits[$cover] = $credits[$post->image_url];
+            unset($credits[$post->image_url]);
+        }
         $content = (string) $post->content;
         $old = [];
         foreach (self::inlinePaths($content) as $path) {
             if (self::needsReprocess($path) && ($new = $rewrite($path))) {
                 $content = str_replace("]({$path})", "]({$new})", $content);
                 $old[] = $path;
+                if (isset($credits[$path])) {
+                    $credits[$new] = $credits[$path];
+                    unset($credits[$path]);
+                }
             }
         }
 
         $previousCover = $post->image_url;
-        $post->update(array_filter(['image_url' => $cover, 'content' => $old ? $content : null]));
+        $post->update(array_filter(['image_url' => $cover, 'content' => $old ? $content : null, 'image_credits' => $credits ?: null]));
         if ($cover) {
             $this->finishCover($post, $previousCover);
         }

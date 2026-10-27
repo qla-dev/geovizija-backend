@@ -11,12 +11,13 @@ class Post extends Model
 {
     protected $fillable = [
         'category_id', 'slug', 'title', 'excerpt', 'content',
-        'image_url', 'author', 'read_time', 'featured', 'published_at',
+        'image_url', 'image_credits', 'author', 'read_time', 'featured', 'published_at',
     ];
 
     protected function casts(): array
     {
         return [
+            'image_credits' => 'array',
             'featured' => 'boolean',
             'read_time' => 'integer',
             'published_at' => 'datetime',

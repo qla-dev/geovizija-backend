@@ -35,6 +35,12 @@ class PostResource extends JsonResource
             'imageUrl' => $this->image_url && ! preg_match('#^https?://#', $this->image_url)
                 ? asset($this->image_url)
                 : $this->image_url,
+            // Photo credits, shown as text under the images: the cover's, and the in-text ones by absolute URL.
+            'imageCredit' => ($this->image_credits ?? [])[$this->image_url] ?? null,
+            'imageCredits' => (object) collect($this->image_credits ?? [])
+                ->except([$this->image_url])
+                ->mapWithKeys(fn ($credit, $path) => [asset($path) => $credit])
+                ->all(),
             'author' => $this->author,
             'date' => $publishedAt
                 ? $publishedAt->format('d').'. '.self::MONTHS[$publishedAt->month].' '.$publishedAt->format('Y')

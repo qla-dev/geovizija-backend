@@ -247,6 +247,31 @@ class PostUpdateTest extends TestCase
         Http::assertNotSent(fn ($request) => str_contains($request->url(), 'openrouter'));
     }
 
+    public function test_photo_credits_are_stored_per_image_and_follow_replacements(): void
+    {
+        $this->newArticle([
+            'cover' => self::PNG, 'coverCredit' => 'Foto: A / Wikimedia Commons, CC BY-SA 4.0',
+            'inlineImages' => [self::PNG, self::PNG], 'inlineCredits' => [null, 'Foto: B / Pixabay'],
+        ])->assertCreated()
+            ->assertJsonPath('data.imageCredit', 'Foto: A / Wikimedia Commons, CC BY-SA 4.0');
+
+        $post = Post::sole();
+        [$first, $second] = PostImageGenerator::inlinePaths($post->content);
+        $this->assertSame([$post->image_url => 'Foto: A / Wikimedia Commons, CC BY-SA 4.0', $second => 'Foto: B / Pixabay'], $post->image_credits);
+
+        $response = $this->postJson('/api/publish', [
+            'secret' => 'tajna', 'type' => 'article', 'id' => $post->id,
+            'cover' => self::PNG,
+            'replaceInline' => [['number' => 2, 'image' => self::PNG, 'credit' => 'Foto: C / Wikimedia Commons, CC0']],
+        ])->assertOk();
+
+        $post->refresh();
+        $replaced = PostImageGenerator::inlinePaths($post->content)[1];
+        $this->assertSame([$replaced => 'Foto: C / Wikimedia Commons, CC0'], $post->image_credits);
+        $response->assertJsonPath('data.imageCredit', null)
+            ->assertJsonPath('data.imageCredits', [asset($replaced) => 'Foto: C / Wikimedia Commons, CC0']);
+    }
+
     public function test_article_without_usable_cover_stays_draft_until_published_with_one(): void
     {
         $this->newArticle()->assertStatus(202)->assertJsonPath('status', 'draft');
