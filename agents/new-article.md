@@ -63,7 +63,7 @@ Završni pasus koji povezuje temu s čitaocem ili budućnošću.
 - Exactly 2 image markers: the first after the second paragraph, the second before the last subheading's text. Each describes a concrete scene that differs from the cover (the cover is drawn from title and excerpt).
 - Bosnian (ijekavica, latinica), National Geographic tone; open with a strong first paragraph that does not repeat the title; end by connecting the topic to the reader or the future.
 - Only well-known, verifiable facts. No invented quotes, experts, institutions or statistics.
-- Categories: use a `slug` from the context (`priroda`, `putovanja`, `drustvo`, `tehnologija`, `kultura`, `stanovnistvo`, `zanimljivosti`, `skolstvo`).
+- Categories: use a `slug` from the context (`priroda`, `putovanja`, `drustvo`, `tehnologija`, `kultura`, `stanovnistvo`, `zanimljivosti`, `skolstvo`, `zdravlje`).
 
 ## Editing an existing article
 
